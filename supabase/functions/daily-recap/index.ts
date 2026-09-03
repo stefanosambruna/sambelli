@@ -5,10 +5,10 @@
 //
 // Autenticazione: header  Authorization: Bearer <CRON_SECRET>
 
-import { hourAtHome, todayAtHome } from "../_shared/dates.ts";
+import { formatShort, hourAtHome, todayAtHome } from "../_shared/dates.ts";
 import { listActiveTasks } from "../_shared/db.ts";
 import { doneKeyboard, groupByBucket, renderAgenda } from "../_shared/format.ts";
-import { allowedChatIds, sendMessage } from "../_shared/telegram.ts";
+import { allowedChatIds, escapeHtml, sendMessage } from "../_shared/telegram.ts";
 
 // Ora di casa del recap. Se cambia, cambia anche la schedulazione in supabase/cron.sql
 // (06 e 07 UTC coprono le 8 di Roma in ora legale e solare).
@@ -38,15 +38,19 @@ Deno.serve(async (req) => {
   const due = [...(grouped.get("overdue") ?? []), ...(grouped.get("today") ?? [])];
   const week = grouped.get("week") ?? [];
 
-  if (!due.length && !week.length) {
-    return Response.json({ sent: false, reason: "niente in scadenza questa settimana" });
+  // Un messaggio arriva sempre, anche a vuoto: così si sa che il giro funziona.
+  let text: string;
+  if (due.length) {
+    text = `☀️ <b>Buongiorno!</b> Ecco la situazione:\n\n${renderAgenda(tasks, today, ["overdue", "today", "week"])}`;
+  } else if (week.length) {
+    text = `☀️ <b>Buongiorno!</b> Oggi niente di urgente. In settimana:\n\n${renderAgenda(tasks, today, ["week"])}`;
+  } else {
+    const next = tasks[0]; // già ordinati per scadenza
+    const preview = next
+      ? `Prossima cosa in agenda: ${escapeHtml(next.title)}, ${formatShort(next.next_due, today)}.`
+      : "Non c'è nessun task in agenda: aggiungine uno scrivendomelo.";
+    text = `☀️ <b>Buongiorno!</b> Niente da fare fino a domenica 🎉\n${preview}`;
   }
-
-  const header = due.length
-    ? "☀️ <b>Buongiorno!</b> Ecco la situazione:"
-    : "☀️ <b>Buongiorno!</b> Oggi niente di urgente. In settimana:";
-  const body = renderAgenda(tasks, today, ["overdue", "today", "week"]);
-  const text = `${header}\n\n${body}`;
   const keyboard = doneKeyboard(due);
 
   const results = await Promise.allSettled(chats.map((id) => sendMessage(id, text, { replyMarkup: keyboard })));
