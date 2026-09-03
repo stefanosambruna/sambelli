@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "dom"],
+    "strict": true
+  },
+  "fmt": { "lineWidth": 120 },
+  "tasks": {
+    "check": "deno check telegram-webhook/index.ts daily-recap/index.ts",
+    "test": "deno test _shared/"
+  }
+}

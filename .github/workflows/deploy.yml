@@ -1,0 +1,39 @@
+name: Deploy
+
+# A ogni push su main: applica le migrazioni e fa il deploy delle Edge Functions.
+# Segreti richiesti nel repo (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_ACCESS_TOKEN  - token personale: https://supabase.com/dashboard/account/tokens
+#   SUPABASE_PROJECT_ID    - il ref del progetto (è nell'URL della dashboard)
+#   SUPABASE_DB_PASSWORD   - password del database del progetto
+# I secret delle funzioni (Telegram, Anthropic, cron) si impostano una volta con
+# `supabase secrets set --env-file supabase/functions/.env`, non passano da qui.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Link project
+        run: supabase link --project-ref "$PROJECT_ID"
+      - name: Apply migrations
+        run: supabase db push
+      - name: Deploy Edge Functions
+        run: |
+          supabase functions deploy telegram-webhook --project-ref "$PROJECT_ID"
+          supabase functions deploy daily-recap --project-ref "$PROJECT_ID"
