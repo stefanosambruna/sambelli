@@ -1,6 +1,6 @@
 // Recap mattutino. Chiamato da pg_cron (vedi supabase/cron.sql) o a mano.
 //
-//   POST /daily-recap            -> manda il recap se a casa sono le RECAP_HOUR (default 8)
+//   POST /daily-recap            -> manda il recap se a casa sono le RECAP_HOUR
 //   POST /daily-recap?force=1    -> manda comunque (per provare)
 //
 // Autenticazione: header  Authorization: Bearer <CRON_SECRET>
@@ -10,6 +10,10 @@ import { listActiveTasks } from "../_shared/db.ts";
 import { doneKeyboard, groupByBucket, renderAgenda } from "../_shared/format.ts";
 import { allowedChatIds, sendMessage } from "../_shared/telegram.ts";
 
+// Ora di casa del recap. Se cambia, cambia anche la schedulazione in supabase/cron.sql
+// (06 e 07 UTC coprono le 8 di Roma in ora legale e solare).
+const RECAP_HOUR = 8;
+
 Deno.serve(async (req) => {
   const secret = Deno.env.get("CRON_SECRET");
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -18,11 +22,9 @@ Deno.serve(async (req) => {
 
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";
-  const recapHour = Number(Deno.env.get("RECAP_HOUR") ?? "8");
   const hour = hourAtHome();
-
-  if (!force && hour !== recapHour) {
-    return Response.json({ sent: false, reason: `ora locale ${hour}, recap alle ${recapHour}` });
+  if (!force && hour !== RECAP_HOUR) {
+    return Response.json({ sent: false, reason: `ora locale ${hour}, recap alle ${RECAP_HOUR}` });
   }
 
   const chats = allowedChatIds();

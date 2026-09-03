@@ -83,22 +83,6 @@ export function keyboardWithout(
   return rows.length ? { inline_keyboard: rows } : undefined;
 }
 
-export function renderTaskDetail(t: TaskOverview, today: IsoDate): string {
-  const lines = [
-    `<b>${escapeHtml(t.title)}</b>`,
-    `Prossima: ${formatShort(t.next_due, today)} (${formatRelative(t.next_due, today)})`,
-    `Ricorrenza: ${describeRecurrence(t)}`,
-  ];
-  if (t.assigned_to_name) lines.push(`Assegnato a: ${escapeHtml(t.assigned_to_name)}`);
-  if (t.last_done_on) {
-    lines.push(
-      `Ultima volta: ${formatShort(t.last_done_on, today)}${t.last_done_by ? ` (${escapeHtml(t.last_done_by)})` : ""}`,
-    );
-  }
-  if (t.notes) lines.push(`<i>${escapeHtml(t.notes)}</i>`);
-  return lines.join("\n");
-}
-
 export function renderHistory(rows: CompletionRecord[], today: IsoDate): string {
   if (!rows.length) return "Nessun completamento registrato.";
   return rows
@@ -115,8 +99,19 @@ export function renderCompleted(who: string, t: TaskRow, today: IsoDate): string
   return `✅ <b>${escapeHtml(who)}</b> ha fatto: ${escapeHtml(t.title)}\n${next}`;
 }
 
-export function renderPostponed(t: TaskRow, today: IsoDate): string {
-  return `⏭ ${escapeHtml(t.title)} spostato a ${formatShort(t.next_due, today)}.`;
+export function renderPostponed(title: string, until: IsoDate, today: IsoDate): string {
+  return `⏭ ${escapeHtml(title)} spostato a ${formatShort(until, today)}.`;
+}
+
+// Eventi in testo semplice, identici per bottoni e agente: vanno all'altra chat.
+export function eventCompleted(who: string, t: TaskRow, today: IsoDate): string {
+  return t.active
+    ? `✅ ${who} ha fatto: ${t.title} (prossima ${formatShort(t.next_due, today)})`
+    : `✅ ${who} ha fatto: ${t.title} (una tantum, archiviato)`;
+}
+
+export function eventPostponed(who: string, title: string, until: IsoDate, today: IsoDate): string {
+  return `⏭ ${who} ha spostato "${title}" a ${formatShort(until, today)}`;
 }
 
 function truncate(s: string, n: number): string {

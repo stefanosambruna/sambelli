@@ -54,11 +54,17 @@ function apiBase(): string {
 }
 
 async function call<T>(method: string, payload: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`${apiBase()}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${apiBase()}/${method}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    // L'errore di rete porta con sé l'URL, e quindi il token: non lo propaghiamo.
+    throw new Error(`Telegram ${method}: rete non raggiungibile (${err instanceof Error ? err.name : "errore"})`);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok || body.ok === false) {
     throw new Error(`Telegram ${method} fallito: ${res.status} ${JSON.stringify(body)}`);
@@ -68,6 +74,14 @@ async function call<T>(method: string, payload: Record<string, unknown>): Promis
 
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Testo generato dal modello: escape di tutto, poi riammessi solo <b> e <i>.
+ * Senza questo un titolo con "<" o "&" fa rifiutare il messaggio a Telegram.
+ */
+export function sanitizeModelHtml(s: string): string {
+  return escapeHtml(s).replace(/&lt;(\/?)(b|i)&gt;/g, "<$1$2>");
 }
 
 export function sendMessage(
@@ -105,7 +119,7 @@ export function displayName(u: TelegramUser): string {
   return u.first_name || u.username || `utente ${u.id}`;
 }
 
-/** Chat da cui accettiamo messaggi. Vuoto = tutte (solo per prove). */
+/** Chat da cui accettiamo messaggi. Vuoto = nessuna: la lista è l'unica autorizzazione. */
 export function allowedChatIds(): number[] {
   return (Deno.env.get("TELEGRAM_ALLOWED_CHAT_IDS") ?? "")
     .split(",")
@@ -116,6 +130,5 @@ export function allowedChatIds(): number[] {
 }
 
 export function isChatAllowed(chatId: number): boolean {
-  const allowed = allowedChatIds();
-  return allowed.length === 0 || allowed.includes(chatId);
+  return allowedChatIds().includes(chatId);
 }

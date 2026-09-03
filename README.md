@@ -22,7 +22,7 @@ Telegram ──webhook──▶ Edge Function telegram-webhook ──▶ Postgre
 pg_cron ──06/07 UTC──▶ Edge Function daily-recap ──▶ Telegram (recap con bottoni)
 ```
 
-- `supabase/migrations/…_init.sql` — schema, vista `task_overview`, funzioni `complete_task` e `postpone_task`.
+- `supabase/migrations/` — schema, vista `task_overview` (security invoker), funzione `complete_task`.
 - `supabase/functions/_shared/` — `dates` (fuso Europe/Rome, raggruppamenti), `db` (accesso dati),
   `telegram` (Bot API), `format` (testi e tastiere), `prompt` + `agent` (Claude e strumenti).
 - `supabase/functions/telegram-webhook/` — comandi, bottoni inline, delega a Claude.
@@ -38,8 +38,11 @@ Ogni task ha una **prossima scadenza** (`next_due`), che è l'unica cosa usata p
 - `completion` (default): la prossima scadenza parte da quando lo fai. Sale addolcitore, lenzuola, piante.
 - `schedule`: la prossima avanza a calendario, saltando gli arretrati. Il primo del mese, ogni settembre.
 
-Senza ricorrenza il task è una tantum e si archivia quando lo completi. I task non hanno un
-proprietario di default: chi li fa li segna. L'assegnazione esiste ma è l'eccezione.
+Senza ricorrenza il task è una tantum e si archivia quando lo completi. Rimandare un task scrive
+`postponed_until` e non tocca `next_due`: un task a calendario rimandato non perde la sua ancora, e
+il completamento successivo azzera il rinvio. La vista `task_overview` espone come `next_due` la
+data effettiva. I task non hanno un proprietario di default: chi li fa li segna. L'assegnazione
+esiste ma è l'eccezione.
 
 ## Setup
 
@@ -88,9 +91,10 @@ proprietario di default: chi li fa li segna. L'assegnazione esiste ma è l'eccez
    scripts/set-webhook.sh <PROJECT_REF>
    ```
 
-5. Scopri l'id della chat: scrivi `/id` nel gruppo, il bot risponde con un numero (negativo per i
-   gruppi). Mettilo in `TELEGRAM_ALLOWED_CHAT_IDS` nel `.env` e rilancia `supabase secrets set`.
-   Da quel momento il bot ignora ogni altra chat.
+5. Scopri gli id delle chat: ognuno apre il bot e preme Avvia (o scrive `/start`). Finché la
+   chat non è autorizzata il bot risponde solo con il suo id. Mettili in `TELEGRAM_ALLOWED_CHAT_IDS`
+   nel `.env`, separati da virgola, e rilancia `supabase secrets set`. Con la lista vuota il bot
+   non risponde a nessuno; con la lista piena ignora chiunque non ci sia.
 
 6. Recap mattutino: apri `supabase/cron.sql`, sostituisci `<PROJECT_REF>` e `<CRON_SECRET>`, ed
    eseguilo nel **SQL Editor** del progetto. Per provarlo subito senza aspettare le 8:

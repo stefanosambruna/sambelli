@@ -5,7 +5,7 @@
 // dalle helper beta, e vediamo esattamente cosa succede a ogni giro.
 
 import Anthropic from "npm:@anthropic-ai/sdk@0.123.0";
-import { isIsoDate, type IsoDate, todayAtHome } from "./dates.ts";
+import { formatShort, isIsoDate, type IsoDate, todayAtHome } from "./dates.ts";
 import {
   type ChatMessage,
   completeTask,
@@ -21,6 +21,7 @@ import {
   type TaskOverview,
   updateTask,
 } from "./db.ts";
+import { eventCompleted, eventPostponed } from "./format.ts";
 import { buildContext, SYSTEM_PROMPT } from "./prompt.ts";
 
 const MODEL = "claude-opus-5";
@@ -186,12 +187,8 @@ async function executeTool(ctx: AgentContext, name: string, input: ToolInput): P
     case "complete_task": {
       const task = requireTask(ctx, str(input, "task_id"));
       const by = resolveMember(ctx, str(input, "done_by")) ?? ctx.sender;
-      const updated = await completeTask(task.id, by.id, date(input, "done_on"), str(input, "note"));
-      ctx.events.push(
-        updated.active
-          ? `✅ ${by.name} ha fatto: ${task.title} (prossima ${updated.next_due})`
-          : `✅ ${by.name} ha fatto: ${task.title} (una tantum, archiviato)`,
-      );
+      const updated = await completeTask(task.id, by.id, date(input, "done_on") ?? ctx.today, str(input, "note"));
+      ctx.events.push(eventCompleted(by.name, updated, ctx.today));
       return JSON.stringify({
         ok: true,
         title: task.title,
@@ -204,9 +201,9 @@ async function executeTool(ctx: AgentContext, name: string, input: ToolInput): P
       const task = requireTask(ctx, str(input, "task_id"));
       const until = date(input, "until");
       if (!until) throw new Error("until obbligatorio");
-      const updated = await postponeTask(task.id, until);
-      ctx.events.push(`⏭ ${ctx.sender.name} ha spostato "${task.title}" a ${updated.next_due}`);
-      return JSON.stringify({ ok: true, title: task.title, next_due: updated.next_due });
+      await postponeTask(task.id, until);
+      ctx.events.push(eventPostponed(ctx.sender.name, task.title, until, ctx.today));
+      return JSON.stringify({ ok: true, title: task.title, next_due: until });
     }
     case "create_task": {
       const title = str(input, "title");
@@ -227,7 +224,9 @@ async function executeTool(ctx: AgentContext, name: string, input: ToolInput): P
         assigned_to: assignee?.id ?? null,
         created_by: ctx.sender.id,
       });
-      ctx.events.push(`➕ ${ctx.sender.name} ha aggiunto "${created.title}" (scade ${created.next_due})`);
+      ctx.events.push(
+        `➕ ${ctx.sender.name} ha aggiunto "${created.title}" (scade ${formatShort(created.next_due, ctx.today)})`,
+      );
       return JSON.stringify({ ok: true, id: created.id, title: created.title, next_due: created.next_due });
     }
     case "update_task": {
@@ -244,14 +243,23 @@ async function executeTool(ctx: AgentContext, name: string, input: ToolInput): P
         const unit = str(input, "unit") as RecurrenceUnit | undefined;
         if (everyN !== undefined) patch.every_n = everyN;
         if (unit) patch.unit = unit;
-        // Se cambia solo uno dei due, completa con il valore attuale.
-        if (patch.every_n !== undefined && patch.unit === undefined) patch.unit = task.unit ?? "week";
-        if (patch.unit !== undefined && patch.every_n === undefined) patch.every_n = task.every_n ?? 1;
+        const half = (patch.every_n === undefined) !== (patch.unit === undefined);
+        if (half && task.every_n === null) {
+          // Stessa regola di create_task: una ricorrenza nuova va detta per intero.
+          throw new Error("every_n e unit vanno passati insieme (o nessuno dei due)");
+        }
+        // Task già ricorrente: completa la metà mancante con il valore attuale.
+        if (patch.every_n !== undefined && patch.unit === undefined) patch.unit = task.unit!;
+        if (patch.unit !== undefined && patch.every_n === undefined) patch.every_n = task.every_n!;
       }
       const anchor = str(input, "anchor") as RecurrenceAnchor | undefined;
       if (anchor) patch.anchor = anchor;
       const nextDue = date(input, "next_due");
-      if (nextDue) patch.next_due = nextDue;
+      if (nextDue) {
+        // Modifica esplicita della scadenza: nuova ancora, e via l'eventuale rinvio.
+        patch.next_due = nextDue;
+        patch.postponed_until = null;
+      }
       if (typeof input.assigned_to === "string") {
         patch.assigned_to = input.assigned_to === "" ? null : resolveMember(ctx, input.assigned_to)!.id;
       }
@@ -343,14 +351,24 @@ export async function runAgent(sender: Member, text: string, history: ChatMessag
   ];
 
   let finalText = "";
+  let exhausted = true;
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const response = await createMessage({
-      max_tokens: 4000,
-      system: SYSTEM_PROMPT,
-      tools: TOOLS,
-      messages,
-      output_config: { effort: "low" },
-    });
+    let response: Anthropic.Beta.BetaMessage;
+    try {
+      response = await createMessage({
+        max_tokens: 4000,
+        system: SYSTEM_PROMPT,
+        tools: TOOLS,
+        messages,
+        output_config: { effort: "low" },
+      });
+    } catch (err) {
+      // Se uno strumento ha già scritto sul DB, l'utente e l'altra chat devono saperlo
+      // anche se il modello non riesce a chiudere la frase.
+      if (ctx.events.length === 0) throw err;
+      console.error("modello fallito dopo mutazioni, rispondo con gli eventi", err);
+      return { text: ctx.events.join("\n"), events: ctx.events };
+    }
 
     if (response.stop_reason === "refusal") {
       return { text: "Su questo preferisco non rispondere.", events: ctx.events };
@@ -360,7 +378,10 @@ export async function runAgent(sender: Member, text: string, history: ChatMessag
     if (texts.length) finalText = texts.join("\n");
 
     const toolUses = response.content.filter((b): b is ToolUseBlock => b.type === "tool_use");
-    if (response.stop_reason !== "tool_use" || toolUses.length === 0) break;
+    if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
+      exhausted = false;
+      break;
+    }
 
     messages.push({ role: "assistant", content: response.content });
 
@@ -384,5 +405,10 @@ export async function runAgent(sender: Member, text: string, history: ChatMessag
     ctx.tasks = await listActiveTasks();
   }
 
-  return { text: finalText || "Fatto.", events: ctx.events };
+  if (exhausted) {
+    // Il testo intermedio può annunciare lavoro mai eseguito: riportiamo solo i fatti.
+    const done = ctx.events.length ? ctx.events.join("\n") : "Non ho fatto modifiche.";
+    return { text: `${done}\nMi sono fermato qui: controlla con /tutti.`, events: ctx.events };
+  }
+  return { text: finalText || (ctx.events.length ? ctx.events.join("\n") : "Fatto."), events: ctx.events };
 }

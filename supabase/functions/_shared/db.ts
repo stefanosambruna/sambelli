@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.113.0";
-import type { IsoDate } from "./dates.ts";
+import { type IsoDate, todayAtHome } from "./dates.ts";
 
 export type RecurrenceUnit = "day" | "week" | "month" | "year";
 export type RecurrenceAnchor = "completion" | "schedule";
@@ -18,11 +18,17 @@ export interface TaskRow {
   unit: RecurrenceUnit | null;
   anchor: RecurrenceAnchor;
   next_due: IsoDate;
+  postponed_until: IsoDate | null;
   assigned_to: string | null;
   active: boolean;
 }
 
+/**
+ * Riga della vista: qui `next_due` è la data EFFETTIVA (rinvio incluso),
+ * mentre `scheduled_due` è l'ancora usata dalla ricorrenza a calendario.
+ */
 export interface TaskOverview extends TaskRow {
+  scheduled_due: IsoDate;
   assigned_to_name: string | null;
   last_done_on: IsoDate | null;
   last_done_by: string | null;
@@ -52,7 +58,7 @@ export interface TaskInput {
   created_by?: string | null;
 }
 
-export type TaskPatch = Partial<Omit<TaskInput, "created_by">> & { active?: boolean };
+export type TaskPatch = Partial<Omit<TaskInput, "created_by">> & { active?: boolean; postponed_until?: IsoDate | null };
 
 let cached: SupabaseClient | undefined;
 
@@ -110,7 +116,7 @@ export function findMemberByName(members: Member[], name: string): Member | unde
 // ---------------------------------------------------------------------------
 
 const OVERVIEW_COLUMNS =
-  "id, title, notes, every_n, unit, anchor, next_due, assigned_to, active, assigned_to_name, last_done_on, last_done_by";
+  "id, title, notes, every_n, unit, anchor, next_due, scheduled_due, postponed_until, assigned_to, active, assigned_to_name, last_done_on, last_done_by";
 
 export async function listActiveTasks(): Promise<TaskOverview[]> {
   const res = await db()
@@ -138,24 +144,28 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<TaskRow>
   return unwrap(res, "updateTask") as TaskRow;
 }
 
+/** Registra il completamento; "oggi" è sempre nel fuso di casa, mai il current_date del server. */
 export async function completeTask(
   taskId: string,
   memberId: string | null,
-  doneOn?: IsoDate,
+  doneOn: IsoDate = todayAtHome(),
   note?: string | null,
 ): Promise<TaskRow> {
   const res = await db().rpc("complete_task", {
     p_task_id: taskId,
     p_member_id: memberId,
-    p_done_on: doneOn ?? undefined,
-    p_note: note ?? undefined,
+    p_done_on: doneOn,
+    p_note: note ?? null,
   });
   return unwrap(res, "completeTask") as TaskRow;
 }
 
-export async function postponeTask(taskId: string, until: IsoDate): Promise<TaskRow> {
-  const res = await db().rpc("postpone_task", { p_task_id: taskId, p_until: until });
-  return unwrap(res, "postponeTask") as TaskRow;
+/**
+ * Rimanda senza toccare l'ancora della ricorrenza: scrive solo postponed_until.
+ * Il completamento successivo azzera il rinvio.
+ */
+export function postponeTask(taskId: string, until: IsoDate): Promise<TaskRow> {
+  return updateTask(taskId, { postponed_until: until });
 }
 
 export async function listHistory(opts: {

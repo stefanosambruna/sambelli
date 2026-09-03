@@ -13,6 +13,8 @@ import {
 } from "../_shared/db.ts";
 import {
   doneKeyboard,
+  eventCompleted,
+  eventPostponed,
   groupByBucket,
   HELP_TEXT,
   keyboardWithout,
@@ -28,6 +30,7 @@ import {
   editMessageReplyMarkup,
   escapeHtml,
   isChatAllowed,
+  sanitizeModelHtml,
   sendMessage,
   type TelegramCallbackQuery,
   type TelegramMessage,
@@ -40,8 +43,9 @@ const ok = () => new Response("ok", { status: 200 });
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Sambelli webhook", { status: 200 });
 
+  // Fail closed: senza secret configurato il webhook non accetta nulla.
   const expected = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
-  if (expected && req.headers.get("x-telegram-bot-api-secret-token") !== expected) {
+  if (!expected || req.headers.get("x-telegram-bot-api-secret-token") !== expected) {
     return new Response("forbidden", { status: 403 });
   }
 
@@ -59,8 +63,11 @@ Deno.serve(async (req) => {
     else if (update.message?.text) await handleMessage(update.message);
   } catch (err) {
     console.error("update", update.update_id, err);
+    if (update.callback_query) {
+      await answerCallbackQuery(update.callback_query.id, "Errore, riprova").catch(() => {});
+    }
     const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
-    if (chatId) {
+    if (chatId && isChatAllowed(chatId)) {
       const text = err instanceof ModelUnavailableError
         ? "Il modello è sovraccarico in questo momento. Riprova tra un minuto, oppure usa /oggi e i bottoni."
         : "Ops, qualcosa è andato storto. Riprova tra un attimo.";
@@ -78,7 +85,8 @@ async function handleMessage(msg: TelegramMessage): Promise<void> {
   if (!msg.from || msg.from.is_bot) return;
 
   if (!isChatAllowed(chatId)) {
-    // Utile la prima volta, per scoprire l'id della chat da mettere in TELEGRAM_ALLOWED_CHAT_IDS.
+    // Unica cosa che facciamo con una chat sconosciuta: dirle il suo id, così si può
+    // aggiungere a TELEGRAM_ALLOWED_CHAT_IDS. Nessun accesso a DB o modello.
     if (text.startsWith("/start") || text.startsWith("/id")) {
       await sendMessage(chatId, `Questa chat ha id <code>${chatId}</code>. Aggiungilo a TELEGRAM_ALLOWED_CHAT_IDS.`);
     }
@@ -93,15 +101,18 @@ async function handleMessage(msg: TelegramMessage): Promise<void> {
   }
 
   const history = await loadRecentMessages(chatId);
-  const userLine = `${sender.name}: ${text}`;
   const reply = await runAgent(sender, text, history);
 
-  await sendMessage(chatId, reply.text, { replyTo: msg.chat.type === "private" ? undefined : msg.message_id });
+  // Prima memoria e notifica all'altro, poi la risposta: se Telegram rifiuta il messaggio
+  // di risposta, quello che è stato fatto non deve sparire.
   await Promise.all([
-    appendMessage(chatId, "user", userLine, sender.id),
+    appendMessage(chatId, "user", `${sender.name}: ${text}`, sender.id),
     appendMessage(chatId, "assistant", reply.text),
+    broadcast(chatId, reply.events),
   ]);
-  await broadcast(chatId, reply.events);
+  await sendMessage(chatId, sanitizeModelHtml(reply.text), {
+    replyTo: msg.chat.type === "private" ? undefined : msg.message_id,
+  });
 }
 
 async function handleCommand(chatId: number, text: string): Promise<void> {
@@ -169,29 +180,44 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
 
   const [action, taskId] = data.split(":");
   const task = taskId ? await getTask(taskId) : null;
+  const today = todayAtHome();
+
+  const dropButtons = () =>
+    editMessageReplyMarkup(chatId, msg.message_id, keyboardWithout(msg.reply_markup, taskId)).catch(() => {});
+
   if (!task || !task.active) {
     await answerCallbackQuery(cq.id, "Questo task non c'è più");
-    await editMessageReplyMarkup(chatId, msg.message_id, keyboardWithout(msg.reply_markup, taskId)).catch(() => {});
+    await dropButtons();
+    return;
+  }
+
+  // I bottoni esistono solo per task in ritardo o di oggi. Se la scadenza è già nel
+  // futuro, qualcuno l'ha già fatto o rimandato da un altro messaggio: niente doppioni.
+  if (task.next_due > today) {
+    const by = task.last_done_by ? ` da ${task.last_done_by}` : "";
+    await answerCallbackQuery(cq.id, task.last_done_on === today ? `Già fatto${by}` : "Già gestito");
+    await dropButtons();
     return;
   }
 
   const who = await getOrCreateMember(cq.from.id, displayName(cq.from));
-  const today = todayAtHome();
 
   if (action === "d") {
-    const updated = await completeTask(task.id, who.id);
+    const updated = await completeTask(task.id, who.id, today);
     await answerCallbackQuery(cq.id, "Segnato ✅");
-    await editMessageReplyMarkup(chatId, msg.message_id, keyboardWithout(msg.reply_markup, task.id)).catch(() => {});
+    await dropButtons();
+    await broadcast(chatId, [eventCompleted(who.name, updated, today)]);
     await sendMessage(chatId, renderCompleted(who.name, updated, today));
-    await broadcast(chatId, [`✅ ${who.name} ha fatto: ${task.title}`]);
     return;
   }
 
   if (action === "p") {
-    const updated = await postponeTask(task.id, addDays(today, 1));
+    const until = addDays(today, 1);
+    await postponeTask(task.id, until);
     await answerCallbackQuery(cq.id, "Rimandato a domani");
-    await editMessageReplyMarkup(chatId, msg.message_id, keyboardWithout(msg.reply_markup, task.id)).catch(() => {});
-    await sendMessage(chatId, renderPostponed(updated, today));
+    await dropButtons();
+    await broadcast(chatId, [eventPostponed(who.name, task.title, until, today)]);
+    await sendMessage(chatId, renderPostponed(task.title, until, today));
     return;
   }
 
@@ -199,8 +225,8 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Se il bot è configurato su più chat (es. le due chat private), quello che
-// succede in una viene annunciato nelle altre. Con una sola chat di gruppo non fa nulla.
+// Con più chat autorizzate (le due chat private), quello che succede in una viene
+// annunciato nelle altre. Con una sola chat non fa nulla.
 
 async function broadcast(fromChatId: number, events: string[]): Promise<void> {
   if (!events.length) return;
