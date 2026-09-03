@@ -31,7 +31,7 @@ type MessageParam = Anthropic.Beta.BetaMessageParam;
 type ToolUseBlock = Anthropic.Beta.BetaToolUseBlock;
 type ToolResultParam = Anthropic.Beta.BetaToolResultBlockParam;
 
-const ISO_DATE = { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Data ISO YYYY-MM-DD" } as const;
+const ISO_DATE = { type: "string", description: "Data ISO YYYY-MM-DD" } as const;
 const UNIT = { type: "string", enum: ["day", "week", "month", "year"] } as const;
 const ANCHOR = {
   type: "string",
@@ -44,7 +44,6 @@ export const TOOLS: BetaTool[] = [
     name: "complete_task",
     description:
       "Registra che un task è stato fatto e calcola la prossima scadenza. Usa l'id dall'elenco nel contesto.",
-    strict: true,
     input_schema: {
       type: "object",
       properties: {
@@ -60,7 +59,6 @@ export const TOOLS: BetaTool[] = [
   {
     name: "postpone_task",
     description: "Sposta la prossima scadenza di un task a una data, senza segnarlo come fatto.",
-    strict: true,
     input_schema: {
       type: "object",
       properties: {
@@ -75,13 +73,12 @@ export const TOOLS: BetaTool[] = [
     name: "create_task",
     description:
       "Crea un nuovo task. Per un task ricorrente passa every_n e unit; senza, è una tantum. first_due è la prima scadenza (default oggi).",
-    strict: true,
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string", description: "Titolo breve, es. 'Lavare lenzuola'" },
         notes: { type: "string" },
-        every_n: { type: "integer", minimum: 1 },
+        every_n: { type: "integer", description: "Intero >= 1" },
         unit: UNIT,
         anchor: ANCHOR,
         first_due: ISO_DATE,
@@ -95,14 +92,13 @@ export const TOOLS: BetaTool[] = [
     name: "update_task",
     description:
       "Modifica un task esistente: titolo, note, ricorrenza, prossima scadenza, assegnazione, oppure archivialo con active=false. Passa solo i campi da cambiare.",
-    strict: true,
     input_schema: {
       type: "object",
       properties: {
         task_id: { type: "string" },
         title: { type: "string" },
         notes: { type: "string" },
-        every_n: { type: "integer", minimum: 1 },
+        every_n: { type: "integer", description: "Intero >= 1" },
         unit: UNIT,
         anchor: ANCHOR,
         next_due: ISO_DATE,
@@ -120,14 +116,13 @@ export const TOOLS: BetaTool[] = [
   {
     name: "get_history",
     description: "Elenca i completamenti passati: chi ha fatto cosa e quando. Filtra per task, persona o data.",
-    strict: true,
     input_schema: {
       type: "object",
       properties: {
         task_id: { type: "string" },
         member: { type: "string", description: "Nome del membro" },
         since: ISO_DATE,
-        limit: { type: "integer", minimum: 1, maximum: 50 },
+        limit: { type: "integer", description: "Da 1 a 50" },
       },
       required: [],
       additionalProperties: false,
