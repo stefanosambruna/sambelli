@@ -25,15 +25,29 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
     steps:
+      - name: Check secrets
+        id: check
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$PROJECT_ID" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::warning::Segreti Supabase non configurati nel repo: deploy saltato (vedi README)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
       - uses: supabase/setup-cli@v1
+        if: steps.check.outputs.ready == 'true'
         with:
           version: latest
       - name: Link project
+        if: steps.check.outputs.ready == 'true'
         run: supabase link --project-ref "$PROJECT_ID"
       - name: Apply migrations
+        if: steps.check.outputs.ready == 'true'
         run: supabase db push
       - name: Deploy Edge Functions
+        if: steps.check.outputs.ready == 'true'
         run: |
           supabase functions deploy telegram-webhook --project-ref "$PROJECT_ID"
           supabase functions deploy daily-recap --project-ref "$PROJECT_ID"
