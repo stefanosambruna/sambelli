@@ -105,8 +105,8 @@ esiste ma è l'eccezione.
    ```
 
 I membri si registrano da soli: il primo messaggio di ciascuno in una chat ammessa crea la riga
-in `members` con il nome Telegram. Il bot usa quel nome per salutare e nelle notifiche. Per cambiarlo:
-`supabase db query --linked "update members set name = 'Ste' where telegram_user_id = …"`.
+in `members` con il nome Telegram. Il bot usa quel nome per salutare e nelle notifiche. Per cambiarlo
+basta dirglielo: «chiamami Ste».
 
 ### Gruppo o chat private?
 
@@ -138,7 +138,9 @@ Serve Docker. Deno e Supabase CLI: `brew install deno supabase/tap/supabase`.
 supabase start                      # Postgres + tutto lo stack, applica migrazioni e seed
 cd supabase/functions
 deno task check                     # typecheck
-deno task test                      # test unitari (date, raggruppamenti)
+deno task test                      # test unitari (date, formattazione, allowlist, validazioni agente)
+docker exec -i supabase_db_sambelli psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < supabase/tests/complete_task_test.sql   # test delle funzioni SQL, in rollback
 cd ../..
 supabase functions serve --env-file supabase/functions/.env
 ```

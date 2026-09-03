@@ -18,10 +18,11 @@ import {
   postponeTask,
   type RecurrenceAnchor,
   type RecurrenceUnit,
+  renameMember,
   type TaskOverview,
   updateTask,
 } from "./db.ts";
-import { eventCompleted, eventPostponed } from "./format.ts";
+import { describeRecurrence, eventCompleted, eventPostponed } from "./format.ts";
 import { buildContext, SYSTEM_PROMPT } from "./prompt.ts";
 
 const MODEL = "claude-opus-5";
@@ -69,7 +70,8 @@ export const TOOLS: BetaTool[] = [
   },
   {
     name: "postpone_task",
-    description: "Sposta la prossima scadenza di un task a una data, senza segnarlo come fatto.",
+    description:
+      "Rinvia SOLO questa volta la scadenza di un task, senza segnarlo come fatto. La ricorrenza a calendario resta ancorata alla data originale. Per 'rimanda', 'sposta a lunedì', 'non oggi'. Per cambiare la data da ora in poi usa update_task.",
     input_schema: {
       type: "object",
       properties: {
@@ -102,7 +104,7 @@ export const TOOLS: BetaTool[] = [
   {
     name: "update_task",
     description:
-      "Modifica un task esistente: titolo, note, ricorrenza, prossima scadenza, assegnazione, oppure archivialo con active=false. Passa solo i campi da cambiare.",
+      "Modifica un task esistente: titolo, note, ricorrenza, data base della scadenza, assegnazione, oppure archivialo con active=false. Passa solo i campi da cambiare. next_due cambia la ricorrenza da ora in poi (per i task a calendario sposta tutte le occorrenze future): per un rinvio singolo usa postpone_task.",
     input_schema: {
       type: "object",
       properties: {
@@ -112,7 +114,11 @@ export const TOOLS: BetaTool[] = [
         every_n: { type: "integer", description: "Intero >= 1" },
         unit: UNIT,
         anchor: ANCHOR,
-        next_due: ISO_DATE,
+        next_due: {
+          ...ISO_DATE,
+          description:
+            "Nuova data base della ricorrenza, da ora in poi. Per rinviare una sola volta usa postpone_task.",
+        },
         assigned_to: {
           type: "string",
           description: "Nome del membro, oppure stringa vuota per togliere l'assegnazione",
@@ -121,6 +127,19 @@ export const TOOLS: BetaTool[] = [
         active: { type: "boolean", description: "false per archiviare" },
       },
       required: ["task_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "rename_member",
+    description:
+      "Cambia il nome con cui il bot chiama chi sta scrivendo (es. 'chiamami Ste'). Vale per saluti, notifiche e risposte.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nuovo nome, così come lo vuole la persona" },
+      },
+      required: ["name"],
       additionalProperties: false,
     },
   },
@@ -141,7 +160,7 @@ export const TOOLS: BetaTool[] = [
   },
 ];
 
-interface AgentContext {
+export interface AgentContext {
   today: IsoDate;
   sender: Member;
   members: Member[];
@@ -182,7 +201,7 @@ function resolveMember(ctx: AgentContext, name: string | undefined): Member | un
   return m;
 }
 
-async function executeTool(ctx: AgentContext, name: string, input: ToolInput): Promise<string> {
+export async function executeTool(ctx: AgentContext, name: string, input: ToolInput): Promise<string> {
   switch (name) {
     case "complete_task": {
       const task = requireTask(ctx, str(input, "task_id"));
@@ -266,12 +285,35 @@ async function executeTool(ctx: AgentContext, name: string, input: ToolInput): P
       if (typeof input.active === "boolean") patch.active = input.active;
       if (Object.keys(patch).length === 0) throw new Error("Nessun campo da modificare");
       const updated = await updateTask(task.id, patch);
-      ctx.events.push(
-        patch.active === false
-          ? `🗄 ${ctx.sender.name} ha archiviato "${task.title}"`
-          : `✏️ ${ctx.sender.name} ha modificato "${updated.title}"`,
-      );
+      if (patch.active === false) {
+        ctx.events.push(`🗄 ${ctx.sender.name} ha archiviato "${task.title}"`);
+      } else {
+        // All'altra persona serve sapere COSA è cambiato, non solo che è cambiato.
+        const changes: string[] = [];
+        if (patch.title) changes.push(`titolo → ${updated.title}`);
+        if ("notes" in patch) changes.push("note aggiornate");
+        if ("every_n" in patch || "unit" in patch || patch.anchor) {
+          changes.push(`ricorrenza → ${describeRecurrence(updated)}`);
+        }
+        if (patch.next_due) changes.push(`scadenza → ${formatShort(updated.next_due, ctx.today)}`);
+        if ("assigned_to" in patch) {
+          const who = patch.assigned_to ? ctx.members.find((m) => m.id === patch.assigned_to)?.name : undefined;
+          changes.push(who ? `assegnato a ${who}` : "assegnazione tolta");
+        }
+        if (patch.active === true) changes.push("riattivato");
+        ctx.events.push(`✏️ ${ctx.sender.name} ha modificato "${task.title}": ${changes.join(", ")}`);
+      }
       return JSON.stringify({ ok: true, task: updated });
+    }
+    case "rename_member": {
+      const name = str(input, "name")?.trim();
+      if (!name) throw new Error("name obbligatorio");
+      const old = ctx.sender.name;
+      const renamed = await renameMember(ctx.sender.id, name);
+      ctx.sender = renamed;
+      ctx.members = ctx.members.map((m) => (m.id === renamed.id ? renamed : m));
+      ctx.events.push(`👤 ${old} ora si chiama ${renamed.name}`);
+      return JSON.stringify({ ok: true, name: renamed.name });
     }
     case "get_history": {
       const taskId = str(input, "task_id");

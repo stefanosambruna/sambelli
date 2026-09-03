@@ -105,14 +105,22 @@ async function handleMessage(msg: TelegramMessage): Promise<void> {
 
   // Prima memoria e notifica all'altro, poi la risposta: se Telegram rifiuta il messaggio
   // di risposta, quello che è stato fatto non deve sparire.
-  await Promise.all([
+  // La memoria è comodità, non deve far fallire il turno: se si rompe lo logghiamo e basta.
+  const side = await Promise.allSettled([
     appendMessage(chatId, "user", `${sender.name}: ${text}`, sender.id),
     appendMessage(chatId, "assistant", reply.text),
     broadcast(chatId, reply.events),
   ]);
-  await sendMessage(chatId, sanitizeModelHtml(reply.text), {
-    replyTo: msg.chat.type === "private" ? undefined : msg.message_id,
-  });
+  for (const r of side) if (r.status === "rejected") console.error("side effect", r.reason);
+
+  const opts = { replyTo: msg.chat.type === "private" ? undefined : msg.message_id };
+  try {
+    await sendMessage(chatId, sanitizeModelHtml(reply.text), opts);
+  } catch (err) {
+    // Un <b> non chiuso dal modello fa rifiutare l'HTML: meglio in chiaro che niente.
+    console.error("risposta HTML rifiutata, rimando in chiaro", err);
+    await sendMessage(chatId, escapeHtml(reply.text), opts);
+  }
 }
 
 async function handleCommand(chatId: number, text: string): Promise<void> {

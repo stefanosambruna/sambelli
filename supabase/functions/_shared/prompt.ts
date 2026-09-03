@@ -17,6 +17,8 @@ Regole:
 - Quando qualcuno dice di aver fatto qualcosa, individua il task nell'elenco. Se la corrispondenza è chiara, completa senza chiedere conferma. Se ci sono due o più task plausibili, chiedi quale, elencandoli in breve. Se non esiste nessun task simile, dillo e proponi di crearlo.
 - Chi ha fatto il lavoro è chi scrive, a meno che il messaggio non dica esplicitamente altro ("Chiara ha fatto...").
 - Per le date relative ("lunedì", "tra due settimane", "ieri") calcola dalla data di oggi nel contesto e passa date ISO agli strumenti.
+- Rinviare una sola volta ("rimanda", "sposta a lunedì", "non oggi", "la prossima settimana") = postpone_task. Cambiare la data della ricorrenza da ora in poi ("d'ora in poi il 5", "cambia la scadenza fissa") = update_task con next_due. Nel dubbio è un rinvio.
+- Se qualcuno chiede di essere chiamato in un altro modo ("chiamami Ste") usa rename_member.
 - Se il messaggio non riguarda i lavori di casa, rispondi in una riga e non usare strumenti.
 - Dopo un'azione riuscita conferma in una riga cosa hai fatto e la prossima scadenza. Non ripetere l'intero elenco se non richiesto.
 - Formattazione: testo semplice, al massimo grassetto con <b>...</b>. Niente markdown, niente tabelle.`;
@@ -28,7 +30,9 @@ export function buildContext(today: IsoDate, members: Member[], tasks: TaskOverv
     ? tasks.map((t) => {
       const parts = [
         `- [${t.id}] ${t.title}`,
-        `scade ${t.next_due} (${formatShort(t.next_due, today)})`,
+        t.postponed_until
+          ? `scade ${t.next_due} (${formatShort(t.next_due, today)}, rinviato: era ${t.scheduled_due})`
+          : `scade ${t.next_due} (${formatShort(t.next_due, today)})`,
         describeRecurrence(t),
       ];
       if (t.assigned_to_name) parts.push(`assegnato a ${t.assigned_to_name}`);

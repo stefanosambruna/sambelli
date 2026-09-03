@@ -105,6 +105,26 @@ export async function getOrCreateMember(telegramUserId: number, displayName: str
   return unwrap(created, "getOrCreateMember.insert") as Member;
 }
 
+export async function renameMember(id: string, name: string): Promise<Member> {
+  const res = await db().from("members").update({ name }).eq("id", id).select("id, name, telegram_user_id").single();
+  return unwrap(res, "renameMember") as Member;
+}
+
+// ---------------------------------------------------------------------------
+// Stato applicativo minimo (es. data dell'ultimo recap inviato)
+// ---------------------------------------------------------------------------
+
+export async function getAppState(key: string): Promise<string | null> {
+  const res = await db().from("app_state").select("value").eq("key", key).maybeSingle();
+  if (res.error) throw new Error(`getAppState: ${res.error.message}`);
+  return (res.data as { value: string } | null)?.value ?? null;
+}
+
+export async function setAppState(key: string, value: string): Promise<void> {
+  const res = await db().from("app_state").upsert({ key, value, updated_at: new Date().toISOString() });
+  if (res.error) throw new Error(`setAppState: ${res.error.message}`);
+}
+
 export function findMemberByName(members: Member[], name: string): Member | undefined {
   const needle = name.trim().toLowerCase();
   return members.find((m) => m.name.toLowerCase() === needle) ??

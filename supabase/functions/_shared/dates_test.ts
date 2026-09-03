@@ -8,6 +8,7 @@ import {
   formatRelative,
   formatShort,
   hourAtHome,
+  isIsoDate,
   todayAtHome,
 } from "./dates.ts";
 
@@ -62,4 +63,12 @@ Deno.test("todayAtHome/hourAtHome usano il fuso di Roma", () => {
   // 2026-01-15 07:00 UTC = 08:00 a Roma (ora solare)
   const winter = new Date("2026-01-15T07:00:00Z");
   assertEquals(hourAtHome(winter), 8);
+});
+
+Deno.test("isIsoDate accetta solo date esistenti nel formato YYYY-MM-DD", () => {
+  assertEquals(isIsoDate("2026-09-03"), true);
+  assertEquals(isIsoDate("2028-02-29"), true);
+  for (const bad of ["2026-02-30", "2026-13-01", "2026-01-32", "2026-1-5", "ieri", 20260903, null, undefined]) {
+    assertEquals(isIsoDate(bad), false, String(bad));
+  }
 });

@@ -31,8 +31,10 @@ export function hourAtHome(now: Date = new Date()): number {
 }
 
 export function isIsoDate(value: unknown): value is IsoDate {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-    !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  // Round-trip: "2026-02-30" viene parsato come 2 marzo, e non deve passare.
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
 function toUtc(iso: IsoDate): Date {
