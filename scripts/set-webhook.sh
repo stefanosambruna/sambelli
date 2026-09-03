@@ -4,7 +4,7 @@
 # Legge TELEGRAM_BOT_TOKEN e TELEGRAM_WEBHOOK_SECRET da supabase/functions/.env
 set -euo pipefail
 cd "$(dirname "$0")/.."
-REF="${1:?PROJECT_REF mancante (lo trovi nell'URL del progetto Supabase)}"
+REF="${1:?PROJECT_REF mancante (ref del progetto Supabase)}"
 set -a; source supabase/functions/.env; set +a
 URL="https://${REF}.supabase.co/functions/v1/telegram-webhook"
 curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
