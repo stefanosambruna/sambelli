@@ -105,7 +105,8 @@ esiste ma è l'eccezione.
    ```
 
 I membri si registrano da soli: il primo messaggio di ciascuno in una chat ammessa crea la riga
-in `members` con il nome Telegram. Per cambiare nome: `update members set name = 'Chiara' where …`.
+in `members` con il nome Telegram. Il bot usa quel nome per salutare e nelle notifiche. Per cambiarlo:
+`supabase db query --linked "update members set name = 'Ste' where telegram_user_id = …"`.
 
 ### Gruppo o chat private?
 
