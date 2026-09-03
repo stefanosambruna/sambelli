@@ -178,9 +178,9 @@ in `TELEGRAM_ALLOWED_CHAT_IDS`. L'API è `supabase/functions/app-api` (vedi inte
 per le rotte); autentica con l'`initData` firmata da Telegram, e le mutazioni passano dagli stessi
 strumenti dell'agente, quindi notifiche e validazioni coincidono con il bot.
 
-Hosting: build statica su un qualsiasi host HTTPS; l'URL va poi impostato come Menu Button del bot
-in BotFather e in `APP_ORIGINS` tra i secret delle funzioni. Il workflow `pages.yml` è pronto per
-GitHub Pages (richiede repo pubblico sul piano Free).
+Hosting: GitHub Pages, deploy automatico dal workflow `pages.yml` a ogni push che tocca `web/`.
+URL: https://stefanosambruna.github.io/sambelli/ (impostato come Menu Button del bot e in
+`APP_ORIGINS` tra i secret delle funzioni).
 
 ## Prossimi passi
 

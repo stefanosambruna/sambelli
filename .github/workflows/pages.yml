@@ -3,9 +3,10 @@ name: Pages
 # Pubblica la Mini App (web/) su GitHub Pages a ogni push su main che la tocca.
 # Prerequisito una tantum: Settings -> Pages -> Source = GitHub Actions.
 
-# Trigger automatico da riattivare quando l'hosting è deciso (GitHub Pages richiede repo
-# pubblico sul piano Free): per ora solo manuale.
 on:
+  push:
+    branches: [main]
+    paths: ["web/**", "supabase/functions/_shared/dates.ts", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
