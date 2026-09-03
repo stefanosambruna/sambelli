@@ -132,3 +132,15 @@ export function allowedChatIds(): number[] {
 export function isChatAllowed(chatId: number): boolean {
   return allowedChatIds().includes(chatId);
 }
+
+/**
+ * Con più chat autorizzate (le due chat private), quello che succede in una viene
+ * annunciato nelle altre. Con una sola chat non fa nulla. Non lancia mai.
+ */
+export async function broadcast(fromChatId: number, events: string[]): Promise<void> {
+  if (!events.length) return;
+  const others = allowedChatIds().filter((id) => id !== fromChatId);
+  if (!others.length) return;
+  const text = events.map(escapeHtml).join("\n");
+  await Promise.all(others.map((id) => sendMessage(id, text).catch((e) => console.error("broadcast", id, e))));
+}

@@ -42,6 +42,23 @@ begin
   assert t.active = false, 'una tantum archiviato';
   assert (select count(*) from completions where task_id = tid) = 1, 'completamento registrato';
 
+  -- annullamento: torna com'era, riga cancellata; poi non è più annullabile
+  insert into tasks (title, every_n, unit, anchor, next_due, postponed_until) values ('Piante', 3, 'day', 'completion', '2026-09-01', '2026-09-04') returning id into tid;
+  t := complete_task(tid, ste, '2026-09-03');
+  assert t.next_due = '2026-09-06' and t.postponed_until is null, 'piante completate -> 6 set';
+  t := undo_completion((select id from completions where task_id = tid order by created_at desc limit 1));
+  assert t.next_due = '2026-09-01' and t.postponed_until = '2026-09-04' and t.active, 'undo ripristina ancora e rinvio';
+  assert (select count(*) from completions where task_id = tid) = 0, 'undo cancella il completamento';
+  -- undo di un completamento non ultimo: rifiutato
+  t := complete_task(tid, ste, '2026-09-03');
+  t := complete_task(tid, ste, '2026-09-06');
+  begin
+    perform undo_completion((select id from completions where task_id = tid order by created_at asc limit 1));
+    raise exception 'atteso errore: non ultimo';
+  exception when others then
+    if sqlerrm not like '%solo l''ultimo%' then raise; end if;
+  end;
+
   -- task inesistente
   begin
     perform complete_task(gen_random_uuid(), ste, '2026-09-03');

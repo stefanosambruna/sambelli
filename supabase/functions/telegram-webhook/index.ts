@@ -26,6 +26,7 @@ import {
 import {
   allowedChatIds,
   answerCallbackQuery,
+  broadcast,
   displayName,
   editMessageReplyMarkup,
   escapeHtml,
@@ -230,16 +231,4 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
   }
 
   await answerCallbackQuery(cq.id);
-}
-
-// ---------------------------------------------------------------------------
-// Con più chat autorizzate (le due chat private), quello che succede in una viene
-// annunciato nelle altre. Con una sola chat non fa nulla.
-
-async function broadcast(fromChatId: number, events: string[]): Promise<void> {
-  if (!events.length) return;
-  const others = allowedChatIds().filter((id) => id !== fromChatId);
-  if (!others.length) return;
-  const text = events.map(escapeHtml).join("\n");
-  await Promise.all(others.map((id) => sendMessage(id, text).catch((e) => console.error("broadcast", id, e))));
 }

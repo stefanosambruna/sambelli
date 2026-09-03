@@ -5,7 +5,7 @@
   },
   "fmt": { "lineWidth": 120 },
   "tasks": {
-    "check": "deno check telegram-webhook/index.ts daily-recap/index.ts",
+    "check": "deno check telegram-webhook/index.ts daily-recap/index.ts app-api/index.ts",
     "test": "deno test --allow-env=TELEGRAM_ALLOWED_CHAT_IDS _shared/"
   }
 }

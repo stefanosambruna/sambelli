@@ -11,6 +11,7 @@ import {
   completeTask,
   createTask,
   findMemberByName,
+  latestCompletion,
   listActiveTasks,
   listHistory,
   listMembers,
@@ -20,6 +21,7 @@ import {
   type RecurrenceUnit,
   renameMember,
   type TaskOverview,
+  undoCompletion,
   updateTask,
 } from "./db.ts";
 import { describeRecurrence, eventCompleted, eventPostponed } from "./format.ts";
@@ -140,6 +142,22 @@ export const TOOLS: BetaTool[] = [
         name: { type: "string", description: "Nuovo nome, così come lo vuole la persona" },
       },
       required: ["name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "undo_completion",
+    description:
+      "Annulla l'ultimo completamento di un task ('non era vero', 'annulla le lenzuola'): il task torna com'era prima e il completamento sparisce dallo storico. Vale solo per l'ultimo completamento di quel task.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: {
+          type: "string",
+          description: "id del task (anche archiviato: usa get_history se non è nell'elenco)",
+        },
+      },
+      required: ["task_id"],
       additionalProperties: false,
     },
   },
@@ -304,6 +322,19 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
         ctx.events.push(`✏️ ${ctx.sender.name} ha modificato "${task.title}": ${changes.join(", ")}`);
       }
       return JSON.stringify({ ok: true, task: updated });
+    }
+    case "undo_completion": {
+      const taskId = str(input, "task_id");
+      if (!taskId) throw new Error("task_id obbligatorio");
+      const last = await latestCompletion(taskId);
+      if (!last) throw new Error("Nessun completamento registrato per questo task");
+      if (!last.undoable) throw new Error("L'ultimo completamento di questo task non è annullabile");
+      const restored = await undoCompletion(last.id);
+      const back = restored.postponed_until ?? restored.next_due;
+      ctx.events.push(
+        `↩️ ${ctx.sender.name} ha annullato: ${restored.title} (torna a ${formatShort(back, ctx.today)})`,
+      );
+      return JSON.stringify({ ok: true, title: restored.title, next_due: back, active: restored.active });
     }
     case "rename_member": {
       const name = str(input, "name")?.trim();

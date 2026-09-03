@@ -36,10 +36,14 @@ export interface TaskOverview extends TaskRow {
 
 export interface CompletionRecord {
   id: string;
+  task_id: string;
+  member_id: string | null;
   done_on: IsoDate;
   note: string | null;
   task_title: string;
   member_name: string | null;
+  /** true se è l'ultimo completamento del task e si può annullare */
+  undoable: boolean;
 }
 
 export interface ChatMessage {
@@ -196,7 +200,7 @@ export async function listHistory(opts: {
 }): Promise<CompletionRecord[]> {
   let q = db()
     .from("completions")
-    .select("id, done_on, note, tasks!inner(title), members(name)")
+    .select("id, task_id, member_id, done_on, note, prev_next_due, tasks!inner(title), members(name)")
     .order("done_on", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(opts.limit ?? 20);
@@ -206,19 +210,41 @@ export async function listHistory(opts: {
   const res = await q;
   const rows = unwrap(res, "listHistory") as unknown as Array<{
     id: string;
+    task_id: string;
+    member_id: string | null;
     done_on: IsoDate;
     note: string | null;
+    prev_next_due: IsoDate | null;
     tasks: { title: string } | { title: string }[];
     members: { name: string } | { name: string }[] | null;
   }>;
   const first = <T>(v: T | T[] | null): T | null => Array.isArray(v) ? v[0] ?? null : v;
-  return rows.map((r) => ({
-    id: r.id,
-    done_on: r.done_on,
-    note: r.note,
-    task_title: first(r.tasks)?.title ?? "?",
-    member_name: first(r.members)?.name ?? null,
-  }));
+  // Le righe sono ordinate dalla più recente: la prima che vediamo per un task è l'ultima fatta.
+  const seen = new Set<string>();
+  return rows.map((r) => {
+    const latest = !seen.has(r.task_id);
+    seen.add(r.task_id);
+    return {
+      id: r.id,
+      task_id: r.task_id,
+      member_id: r.member_id,
+      done_on: r.done_on,
+      note: r.note,
+      task_title: first(r.tasks)?.title ?? "?",
+      member_name: first(r.members)?.name ?? null,
+      undoable: latest && r.prev_next_due !== null,
+    };
+  });
+}
+
+export async function latestCompletion(taskId: string): Promise<CompletionRecord | null> {
+  const rows = await listHistory({ taskId, limit: 1 });
+  return rows[0] ?? null;
+}
+
+export async function undoCompletion(completionId: string): Promise<TaskRow> {
+  const res = await db().rpc("undo_completion", { p_completion_id: completionId });
+  return unwrap(res, "undoCompletion") as TaskRow;
 }
 
 // ---------------------------------------------------------------------------

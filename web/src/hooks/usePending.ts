@@ -1,0 +1,88 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "../api.ts";
+import { haptic } from "../telegram.ts";
+import type { Task } from "../types.ts";
+
+export const UNDO_MS = 6000;
+
+export type PendingKind = "complete" | "postpone";
+
+export interface Pending {
+  key: string;
+  kind: PendingKind;
+  task: Task;
+  until?: string;
+  deadline: number;
+}
+
+/**
+ * Coda "alla Gmail": l'azione parte dopo UNDO_MS, nel frattempo si può annullare e al
+ * server non arriva nulla (quindi neanche la notifica all'altro). Se l'app viene chiusa
+ * o messa in background, le azioni in sospeso partono subito con keepalive.
+ */
+export function usePending() {
+  const qc = useQueryClient();
+  const [items, setItems] = useState<Pending[]>([]);
+  const timers = useRef(new Map<string, number>());
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  const send = useCallback(async (p: Pending, keepalive = false) => {
+    try {
+      if (p.kind === "complete") await api.complete(p.task.id, keepalive);
+      else await api.postpone(p.task.id, p.until!, keepalive);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Errore");
+    } finally {
+      qc.invalidateQueries({ queryKey: ["agenda"] });
+    }
+  }, [qc]);
+
+  const commit = useCallback((key: string, keepalive = false) => {
+    const p = itemsRef.current.find((x) => x.key === key);
+    timers.current.delete(key);
+    if (!p) return;
+    setItems((xs) => xs.filter((x) => x.key !== key));
+    void send(p, keepalive);
+  }, [send]);
+
+  const add = useCallback((kind: PendingKind, task: Task, until?: string) => {
+    if (itemsRef.current.some((x) => x.task.id === task.id)) return;
+    const key = `${kind}:${task.id}:${Date.now()}`;
+    const deadline = Date.now() + UNDO_MS;
+    setItems((xs) => [...xs, { key, kind, task, until, deadline }]);
+    timers.current.set(key, window.setTimeout(() => commit(key), UNDO_MS));
+    haptic.success();
+  }, [commit]);
+
+  const undo = useCallback((key: string) => {
+    const t = timers.current.get(key);
+    if (t) clearTimeout(t);
+    timers.current.delete(key);
+    setItems((xs) => xs.filter((x) => x.key !== key));
+    haptic.tap();
+  }, []);
+
+  // Chiusura o background: niente attesa, si manda tutto.
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState !== "hidden") return;
+      for (const p of itemsRef.current) {
+        const t = timers.current.get(p.key);
+        if (t) clearTimeout(t);
+        commit(p.key, true);
+      }
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [commit]);
+
+  const pendingTaskIds = new Set(items.map((p) => p.task.id));
+  return { items, add, undo, pendingTaskIds };
+}

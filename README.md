@@ -161,6 +161,27 @@ Con un token vero il bot risponde nella chat indicata. Per testare senza toccare
 
 Per il database locale: `supabase db reset` riapplica migrazioni e seed; `psql "$(supabase status -o env | grep DB_URL | cut -d= -f2- | tr -d '"')"` apre una shell.
 
+## Mini App (web/)
+
+Agenda a colpo d'occhio dentro Telegram: swipe a destra = fatto, a sinistra = domani, con sei
+secondi per annullare prima che parta la notifica all'altro; tap = modifica; "+" = nuovo task;
+"Fatti oggi" con annullamento vero. Stack: Vite, React 19, TypeScript, Tailwind 4, TanStack Query.
+
+```bash
+cd web && pnpm install
+pnpm dev          # http://127.0.0.1:5173/sambelli/ con VITE_DEV_USER_ID (vedi .env.development)
+pnpm build        # dist/ statico
+```
+
+In locale le funzioni vanno servite con `APP_DEV_USER_ID` uguale a `VITE_DEV_USER_ID` e quell'id
+in `TELEGRAM_ALLOWED_CHAT_IDS`. L'API è `supabase/functions/app-api` (vedi intestazione del file
+per le rotte); autentica con l'`initData` firmata da Telegram, e le mutazioni passano dagli stessi
+strumenti dell'agente, quindi notifiche e validazioni coincidono con il bot.
+
+Hosting: build statica su un qualsiasi host HTTPS; l'URL va poi impostato come Menu Button del bot
+in BotFather e in `APP_ORIGINS` tra i secret delle funzioni. Il workflow `pages.yml` è pronto per
+GitHub Pages (richiede repo pubblico sul piano Free).
+
 ## Prossimi passi
 
 - Web app minimale sopra lo stesso database (vista temporale + editor delle ricorrenze).

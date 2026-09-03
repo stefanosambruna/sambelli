@@ -419,3 +419,7 @@ verify_jwt = false
 
 [functions.daily-recap]
 verify_jwt = false
+
+# API della Mini App: autenticazione con i dati firmati da Telegram (initData).
+[functions.app-api]
+verify_jwt = false

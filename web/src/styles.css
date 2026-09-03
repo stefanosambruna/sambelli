@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* I colori arrivano dal tema di Telegram (chiaro/scuro del telefono), con fallback. */
+@theme inline {
+  --color-bg: var(--tg-theme-bg-color, #ffffff);
+  --color-bg2: var(--tg-theme-secondary-bg-color, #f1f1f4);
+  --color-card: var(--tg-theme-section-bg-color, #ffffff);
+  --color-fg: var(--tg-theme-text-color, #111111);
+  --color-hint: var(--tg-theme-hint-color, #8a8a8e);
+  --color-accent: var(--tg-theme-button-color, #2481cc);
+  --color-accent-fg: var(--tg-theme-button-text-color, #ffffff);
+  --color-link: var(--tg-theme-link-color, #2481cc);
+  --color-danger: var(--tg-theme-destructive-text-color, #d33);
+  --color-done: #2e9e5b;
+  --color-snooze: #d9862b;
+  --font-sans: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Nel layer base, altrimenti queste regole vincerebbero sulle utility di Tailwind. */
+@layer base {
+  html, body { background: var(--color-bg2); color: var(--color-fg); }
+  body { margin: 0; font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
+  /* Safari iOS zooma sugli input sotto i 16px */
+  input, select, textarea { font-size: 16px; }
+}
