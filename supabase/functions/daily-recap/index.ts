@@ -6,7 +6,7 @@
 // Autenticazione: header  Authorization: Bearer <CRON_SECRET>
 
 import { formatShort, hourAtHome, todayAtHome } from "../_shared/dates.ts";
-import { listActiveTasks } from "../_shared/db.ts";
+import { listActiveTasks, listMembers } from "../_shared/db.ts";
 import { doneKeyboard, groupByBucket, renderAgenda } from "../_shared/format.ts";
 import { allowedChatIds, escapeHtml, sendMessage } from "../_shared/telegram.ts";
 
@@ -33,27 +33,34 @@ Deno.serve(async (req) => {
   }
 
   const today = todayAtHome();
-  const tasks = await listActiveTasks();
+  const [tasks, members] = await Promise.all([listActiveTasks(), listMembers()]);
+  // In chat privata l'id della chat coincide con l'id utente Telegram: così sappiamo chi saluta.
+  const greet = (chatId: number) => {
+    const m = members.find((x) => x.telegram_user_id === chatId);
+    return m ? `☀️ <b>Buongiorno ${escapeHtml(m.name)}!</b>` : "☀️ <b>Buongiorno!</b>";
+  };
   const grouped = groupByBucket(tasks, today);
   const due = [...(grouped.get("overdue") ?? []), ...(grouped.get("today") ?? [])];
   const week = grouped.get("week") ?? [];
 
   // Un messaggio arriva sempre, anche a vuoto: così si sa che il giro funziona.
-  let text: string;
+  let body: string;
   if (due.length) {
-    text = `☀️ <b>Buongiorno!</b> Ecco la situazione:\n\n${renderAgenda(tasks, today, ["overdue", "today", "week"])}`;
+    body = `Ecco la situazione:\n\n${renderAgenda(tasks, today, ["overdue", "today", "week"])}`;
   } else if (week.length) {
-    text = `☀️ <b>Buongiorno!</b> Oggi niente di urgente. In settimana:\n\n${renderAgenda(tasks, today, ["week"])}`;
+    body = `Oggi niente di urgente. In settimana:\n\n${renderAgenda(tasks, today, ["week"])}`;
   } else {
     const next = tasks[0]; // già ordinati per scadenza
     const preview = next
       ? `Prossima cosa in agenda: ${escapeHtml(next.title)}, ${formatShort(next.next_due, today)}.`
       : "Non c'è nessun task in agenda: aggiungine uno scrivendomelo.";
-    text = `☀️ <b>Buongiorno!</b> Niente da fare fino a domenica 🎉\n${preview}`;
+    body = `Niente da fare fino a domenica 🎉\n${preview}`;
   }
   const keyboard = doneKeyboard(due);
 
-  const results = await Promise.allSettled(chats.map((id) => sendMessage(id, text, { replyMarkup: keyboard })));
+  const results = await Promise.allSettled(
+    chats.map((id) => sendMessage(id, `${greet(id)} ${body}`, { replyMarkup: keyboard })),
+  );
   const failed = results.filter((r) => r.status === "rejected");
   for (const f of failed) console.error("recap", (f as PromiseRejectedResult).reason);
 
