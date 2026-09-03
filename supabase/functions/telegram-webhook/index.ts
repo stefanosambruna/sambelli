@@ -33,7 +33,7 @@ import {
   type TelegramMessage,
   type TelegramUpdate,
 } from "../_shared/telegram.ts";
-import { runAgent } from "../_shared/agent.ts";
+import { ModelUnavailableError, runAgent } from "../_shared/agent.ts";
 
 const ok = () => new Response("ok", { status: 200 });
 
@@ -61,7 +61,10 @@ Deno.serve(async (req) => {
     console.error("update", update.update_id, err);
     const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
     if (chatId) {
-      await sendMessage(chatId, "Ops, qualcosa è andato storto. Riprova tra un attimo.").catch(() => {});
+      const text = err instanceof ModelUnavailableError
+        ? "Il modello è sovraccarico in questo momento. Riprova tra un minuto, oppure usa /oggi e i bottoni."
+        : "Ops, qualcosa è andato storto. Riprova tra un attimo.";
+      await sendMessage(chatId, text).catch(() => {});
     }
   }
   return ok();

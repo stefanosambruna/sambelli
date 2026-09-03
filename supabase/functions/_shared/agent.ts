@@ -24,7 +24,17 @@ import {
 import { buildContext, SYSTEM_PROMPT } from "./prompt.ts";
 
 const MODEL = "claude-opus-5";
+/** Usato solo se Opus è sovraccarico o in errore lato server dopo i retry. */
+const FALLBACK_MODEL = "claude-sonnet-5";
 const MAX_ITERATIONS = 6;
+
+/** Entrambi i modelli non disponibili: il webhook manda un messaggio dedicato. */
+export class ModelUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(`modello non disponibile: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = "ModelUnavailableError";
+  }
+}
 
 type BetaTool = Anthropic.Beta.BetaTool;
 type MessageParam = Anthropic.Beta.BetaMessageParam;
@@ -279,7 +289,41 @@ export interface AgentReply {
 
 let client: Anthropic | undefined;
 function anthropic(): Anthropic {
-  return client ??= new Anthropic();
+  // 4 retry con backoff esponenziale su 429/529/5xx e errori di rete (default SDK: 2).
+  return client ??= new Anthropic({ maxRetries: 4 });
+}
+
+function serverSideFailureStatus(err: unknown): number | undefined {
+  if (!(err instanceof Anthropic.APIError)) return undefined;
+  const status = err.status ?? 0;
+  return status === 529 || status === 429 || status >= 500 ? status : undefined;
+}
+
+function isServerSideFailure(err: unknown): boolean {
+  return serverSideFailureStatus(err) !== undefined;
+}
+
+type CreateParams = Omit<Anthropic.Beta.MessageCreateParamsNonStreaming, "model" | "betas" | "fallbacks">;
+
+/** Opus con fallback server-side; se dopo i retry è ancora giù, Sonnet. */
+async function createMessage(params: CreateParams): Promise<Anthropic.Beta.BetaMessage> {
+  try {
+    return await anthropic().beta.messages.create({
+      ...params,
+      model: MODEL,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+    });
+  } catch (err) {
+    if (!isServerSideFailure(err)) throw err;
+    console.warn(`${MODEL} non disponibile (${serverSideFailureStatus(err)}), provo ${FALLBACK_MODEL}`);
+    try {
+      return await anthropic().beta.messages.create({ ...params, model: FALLBACK_MODEL });
+    } catch (err2) {
+      if (!isServerSideFailure(err2)) throw err2;
+      throw new ModelUnavailableError(err2);
+    }
+  }
 }
 
 /**
@@ -300,15 +344,12 @@ export async function runAgent(sender: Member, text: string, history: ChatMessag
 
   let finalText = "";
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const response = await anthropic().beta.messages.create({
-      model: MODEL,
+    const response = await createMessage({
       max_tokens: 4000,
       system: SYSTEM_PROMPT,
       tools: TOOLS,
       messages,
       output_config: { effort: "low" },
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
     });
 
     if (response.stop_reason === "refusal") {
