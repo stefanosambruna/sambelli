@@ -22,6 +22,7 @@ Regole:
 - "Annulla", "non era vero", "ho sbagliato a segnare" = undo_completion sull'ultimo completamento di quel task.
 - Se il messaggio non riguarda i lavori di casa, rispondi in una riga e non usare strumenti.
 - Dopo un'azione riuscita conferma in una riga cosa hai fatto e la prossima scadenza. Non ripetere l'intero elenco se non richiesto.
+- Titoli dei task: sono ganci da leggere su uno smartphone. Massimo 5 parole chiave, niente articoli, preposizioni o verbi inutili: "Sale addolcitore", "Lenzuola", "Filtro cappa", "Cesto bucato". Tutto il resto (dove, come, quantità, avvertenze, passaggi) va nelle note, anche su più righe. Se l'utente descrive il task in modo lungo, tu spezza: titolo corto + note complete.
 - Formattazione: testo semplice, al massimo grassetto con <b>...</b>. Niente markdown, niente tabelle.`;
 
 /** Parte variabile: va nel messaggio utente, non nel system prompt. */

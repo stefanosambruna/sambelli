@@ -87,7 +87,7 @@ export function TaskRow({ task, today, overdue, onComplete, onOpen }: Props) {
       >
         <div className="flex items-baseline justify-between gap-3">
           <div className="min-w-0">
-            <div className="truncate text-[17px] leading-6">{task.title}</div>
+            <div className="text-[17px] leading-6 break-words">{task.title}</div>
             <div className="mt-0.5 truncate text-[13px] text-hint">
               {describeRecurrence(task)}
               {task.last_done_on && <> · ultima {formatShort(task.last_done_on, today)}{task.last_done_by ? ` (${task.last_done_by})` : ""}</>}

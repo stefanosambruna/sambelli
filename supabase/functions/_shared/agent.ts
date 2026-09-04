@@ -91,8 +91,15 @@ export const TOOLS: BetaTool[] = [
     input_schema: {
       type: "object",
       properties: {
-        title: { type: "string", description: "Titolo breve, es. 'Lavare lenzuola'" },
-        notes: { type: "string" },
+        title: {
+          type: "string",
+          description:
+            "Gancio corto, max 5 parole chiave senza stop word: 'Lenzuola', 'Sale addolcitore', 'Filtro cappa'",
+        },
+        notes: {
+          type: "string",
+          description: "Dettagli completi, anche su più righe: dove, come, quantità, avvertenze, passaggi",
+        },
         every_n: { type: "integer", description: "Intero >= 1" },
         unit: UNIT,
         anchor: ANCHOR,

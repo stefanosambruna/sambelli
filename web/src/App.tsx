@@ -201,6 +201,10 @@ export function App() {
           today={today}
           busy={save.isPending || postponeTo.isPending || archive.isPending}
           onSave={(input) => save.mutate({ id: sheet.task?.id ?? null, input })}
+          onComplete={(task) => {
+            setSheet({ open: false, task: null });
+            pending.add(task);
+          }}
           onPostpone={(task, until) => postponeTo.mutate({ id: task.id, until })}
           onArchive={(task) => confirm(`Archiviare "${task.title}"?`) && archive.mutate(task.id)}
           onClose={() => setSheet({ open: false, task: null })}
