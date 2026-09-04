@@ -16,7 +16,6 @@ import {
   listHistory,
   listMembers,
   type Member,
-  postponeTask,
   type RecurrenceAnchor,
   type RecurrenceUnit,
   renameMember,
@@ -24,7 +23,7 @@ import {
   undoCompletion,
   updateTask,
 } from "./db.ts";
-import { describeRecurrence, eventCompleted, eventPostponed } from "./format.ts";
+import { describeRecurrence, eventCompleted } from "./format.ts";
 import { buildContext, SYSTEM_PROMPT } from "./prompt.ts";
 
 const MODEL = "claude-opus-5";
@@ -71,20 +70,6 @@ export const TOOLS: BetaTool[] = [
     },
   },
   {
-    name: "postpone_task",
-    description:
-      "Rinvia SOLO questa volta la scadenza di un task, senza segnarlo come fatto. La ricorrenza a calendario resta ancorata alla data originale. Per 'rimanda', 'sposta a lunedì', 'non oggi'. Per cambiare la data da ora in poi usa update_task.",
-    input_schema: {
-      type: "object",
-      properties: {
-        task_id: { type: "string" },
-        until: ISO_DATE,
-      },
-      required: ["task_id", "until"],
-      additionalProperties: false,
-    },
-  },
-  {
     name: "create_task",
     description:
       "Crea un nuovo task. Per un task ricorrente passa every_n e unit; senza, è una tantum. first_due è la prima scadenza (default oggi).",
@@ -113,7 +98,7 @@ export const TOOLS: BetaTool[] = [
   {
     name: "update_task",
     description:
-      "Modifica un task esistente: titolo, note, ricorrenza, data base della scadenza, assegnazione, oppure archivialo con active=false. Passa solo i campi da cambiare. next_due cambia la ricorrenza da ora in poi (per i task a calendario sposta tutte le occorrenze future): per un rinvio singolo usa postpone_task.",
+      "Modifica un task esistente: titolo, note, ricorrenza, data base della scadenza, assegnazione, oppure archivialo con active=false. Passa solo i campi da cambiare. next_due cambia la scadenza e, per i task a calendario, l'ancora della ricorrenza da ora in poi.",
     input_schema: {
       type: "object",
       properties: {
@@ -125,8 +110,7 @@ export const TOOLS: BetaTool[] = [
         anchor: ANCHOR,
         next_due: {
           ...ISO_DATE,
-          description:
-            "Nuova data base della ricorrenza, da ora in poi. Per rinviare una sola volta usa postpone_task.",
+          description: "Nuova data della scadenza (e ancora della ricorrenza, da ora in poi).",
         },
         assigned_to: {
           type: "string",
@@ -241,14 +225,6 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
         active: updated.active,
       });
     }
-    case "postpone_task": {
-      const task = requireTask(ctx, str(input, "task_id"));
-      const until = date(input, "until");
-      if (!until) throw new Error("until obbligatorio");
-      await postponeTask(task.id, until);
-      ctx.events.push(eventPostponed(ctx.sender.name, task.title, until, ctx.today));
-      return JSON.stringify({ ok: true, title: task.title, next_due: until });
-    }
     case "create_task": {
       const title = str(input, "title");
       if (!title) throw new Error("title obbligatorio");
@@ -300,9 +276,7 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
       if (anchor) patch.anchor = anchor;
       const nextDue = date(input, "next_due");
       if (nextDue) {
-        // Modifica esplicita della scadenza: nuova ancora, e via l'eventuale rinvio.
         patch.next_due = nextDue;
-        patch.postponed_until = null;
       }
       if (typeof input.assigned_to === "string") {
         patch.assigned_to = input.assigned_to === "" ? null : resolveMember(ctx, input.assigned_to)!.id;
@@ -337,7 +311,7 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
       if (!last) throw new Error("Nessun completamento registrato per questo task");
       if (!last.undoable) throw new Error("L'ultimo completamento di questo task non è annullabile");
       const restored = await undoCompletion(last.id);
-      const back = restored.postponed_until ?? restored.next_due;
+      const back = restored.next_due;
       ctx.events.push(
         `↩️ ${ctx.sender.name} ha annullato: ${restored.title} (torna a ${formatShort(back, ctx.today)})`,
       );

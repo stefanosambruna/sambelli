@@ -36,7 +36,6 @@ Deno.test("executeTool rifiuta input invalidi prima di scrivere", async (t) => {
     ["membro sconosciuto", "complete_task", { task_id: "t-1", done_by: "Mario" }, 'Nessun membro chiamato "Mario"'],
     ["data non ISO", "complete_task", { task_id: "t-1", done_on: "ieri" }, "done_on non è una data ISO"],
     ["data inesistente", "complete_task", { task_id: "t-1", done_on: "2026-02-30" }, "done_on non è una data ISO"],
-    ["postpone senza until", "postpone_task", { task_id: "t-1" }, "until obbligatorio"],
     ["create senza titolo", "create_task", {}, "title obbligatorio"],
     ["create con solo every_n", "create_task", { title: "X", every_n: 2 }, "every_n e unit vanno passati insieme"],
     [

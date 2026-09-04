@@ -95,7 +95,6 @@ export function TaskRow({ task, today, overdue, onComplete, onOpen }: Props) {
             </div>
           </div>
           <div className={`shrink-0 text-[13px] ${overdue ? "font-semibold text-danger" : "text-hint"}`}>
-            {task.postponed_until ? "⏭ " : ""}
             {formatRelative(task.next_due, today)}
           </div>
         </div>

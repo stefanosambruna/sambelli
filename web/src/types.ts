@@ -16,10 +16,7 @@ export interface Task {
   every_n: number | null;
   unit: RecurrenceUnit | null;
   anchor: RecurrenceAnchor;
-  /** data effettiva (rinvio incluso) */
   next_due: IsoDate;
-  scheduled_due: IsoDate;
-  postponed_until: IsoDate | null;
   assigned_to: string | null;
   assigned_to_name: string | null;
   active: boolean;

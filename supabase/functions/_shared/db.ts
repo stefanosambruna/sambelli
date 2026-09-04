@@ -23,10 +23,7 @@ export interface TaskRow {
   active: boolean;
 }
 
-/**
- * Riga della vista: qui `next_due` è la data EFFETTIVA (rinvio incluso),
- * mentre `scheduled_due` è l'ancora usata dalla ricorrenza a calendario.
- */
+/** Riga della vista task_overview (scheduled_due/postponed_until: colonne storiche, oggi coincidono con next_due). */
 export interface TaskOverview extends TaskRow {
   scheduled_due: IsoDate;
   assigned_to_name: string | null;
@@ -182,14 +179,6 @@ export async function completeTask(
     p_note: note ?? null,
   });
   return unwrap(res, "completeTask") as TaskRow;
-}
-
-/**
- * Rimanda senza toccare l'ancora della ricorrenza: scrive solo postponed_until.
- * Il completamento successivo azzera il rinvio.
- */
-export function postponeTask(taskId: string, until: IsoDate): Promise<TaskRow> {
-  return updateTask(taskId, { postponed_until: until });
 }
 
 export async function listHistory(opts: {

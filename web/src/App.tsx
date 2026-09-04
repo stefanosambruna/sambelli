@@ -45,14 +45,6 @@ export function App() {
     },
     onError: fail,
   });
-  const postponeTo = useMutation({
-    mutationFn: ({ id, until }: { id: string; until: string }) => api.postpone(id, until),
-    onSuccess: () => {
-      setSheet({ open: false, task: null });
-      invalidate();
-    },
-    onError: fail,
-  });
   const archive = useMutation({
     mutationFn: (id: string) => api.update(id, { active: false }),
     onSuccess: () => {
@@ -199,13 +191,12 @@ export function App() {
           task={sheet.task}
           members={data.members}
           today={today}
-          busy={save.isPending || postponeTo.isPending || archive.isPending}
+          busy={save.isPending || archive.isPending}
           onSave={(input) => save.mutate({ id: sheet.task?.id ?? null, input })}
           onComplete={(task) => {
             setSheet({ open: false, task: null });
             pending.add(task);
           }}
-          onPostpone={(task, until) => postponeTo.mutate({ id: task.id, until })}
           onArchive={(task) => confirm(`Archiviare "${task.title}"?`) && archive.mutate(task.id)}
           onClose={() => setSheet({ open: false, task: null })}
         />

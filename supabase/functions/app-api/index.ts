@@ -7,7 +7,6 @@
 //   POST  /tasks                       crea (body = input di create_task)
 //   PATCH /tasks/:id                   modifica (body = input di update_task senza task_id)
 //   POST  /tasks/:id/complete          segna fatto oggi
-//   POST  /tasks/:id/postpone          { until: "YYYY-MM-DD" }
 //   POST  /tasks/:id/undo              annulla l'ultimo completamento
 
 import { type AgentContext, executeTool } from "../_shared/agent.ts";
@@ -179,10 +178,6 @@ Deno.serve(async (req) => {
         const result = await mutate(me, "complete_task", { task_id: id }) as Record<string, unknown>;
         const completion = await latestCompletion(id);
         return json(req, { ...result, completion_id: completion?.id ?? null });
-      }
-      if (req.method === "POST" && seg[2] === "postpone") {
-        const { until } = await readBody(req);
-        return json(req, await mutate(me, "postpone_task", { task_id: id, until }));
       }
       if (req.method === "POST" && seg[2] === "undo") {
         return json(req, await mutate(me, "undo_completion", { task_id: id }));

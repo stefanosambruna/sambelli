@@ -31,8 +31,6 @@ export const api = {
   agenda: () => call<Agenda>("GET", "/agenda"),
   complete: (id: string, keepalive = false) =>
     call<{ ok: true; next_due: string; active: boolean; completion_id: string | null }>("POST", `/tasks/${id}/complete`, {}, { keepalive }),
-  postpone: (id: string, until: string, keepalive = false) =>
-    call<{ ok: true; next_due: string }>("POST", `/tasks/${id}/postpone`, { until }, { keepalive }),
   undo: (id: string) => call<{ ok: true; next_due: string; active: boolean }>("POST", `/tasks/${id}/undo`),
   create: (input: TaskInput) => call<{ ok: true; id: string }>("POST", "/tasks", input),
   update: (id: string, input: TaskInput) => call<{ ok: true; task: Task }>("PATCH", `/tasks/${id}`, input),

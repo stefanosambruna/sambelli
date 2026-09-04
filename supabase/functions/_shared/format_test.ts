@@ -47,7 +47,6 @@ Deno.test("doneKeyboard e keyboardWithout", () => {
   const kb = doneKeyboard([a, b])!;
   assertEquals(kb.inline_keyboard.length, 2);
   assertEquals(kb.inline_keyboard[0][0].callback_data, `d:${a.id}`);
-  assertEquals(kb.inline_keyboard[0][1].callback_data, `p:${a.id}`);
   const without = keyboardWithout(kb, a.id)!;
   assertEquals(without.inline_keyboard.length, 1);
   assertEquals(without.inline_keyboard[0][0].callback_data, `d:${b.id}`);

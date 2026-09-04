@@ -1,6 +1,6 @@
 import { Check, Pencil, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { addDays, formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
+import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
 import { describeRecurrence } from "../lib/format.ts";
 import type { Member, RecurrenceAnchor, RecurrenceUnit, Task, TaskInput } from "../types.ts";
 
@@ -11,7 +11,6 @@ interface Props {
   busy: boolean;
   onSave: (input: TaskInput) => void;
   onComplete: (task: Task) => void;
-  onPostpone: (task: Task, until: string) => void;
   onArchive: (task: Task) => void;
   onClose: () => void;
 }
@@ -44,8 +43,7 @@ export function TaskSheet(props: Props) {
 
 // ---------------------------------------------------------------------------
 
-function Detail({ task, today, busy, onComplete, onPostpone, onEdit, onClose }: Props & { task: Task; onEdit: () => void }) {
-  const [postponeTo, setPostponeTo] = useState(task.postponed_until ?? addDays(today, 1));
+function Detail({ task, today, busy, onComplete, onEdit, onClose }: Props & { task: Task; onEdit: () => void }) {
   const overdue = task.next_due < today;
 
   const row = (label: string, value: React.ReactNode) => (
@@ -73,7 +71,6 @@ function Detail({ task, today, busy, onComplete, onPostpone, onEdit, onClose }: 
           "Scadenza",
           <span className={overdue ? "font-semibold text-danger" : ""}>
             {formatShort(task.next_due, today)} · {formatRelative(task.next_due, today)}
-            {task.postponed_until && <span className="block text-[13px] font-normal text-hint">rinviato, era {formatShort(task.scheduled_due, today)}</span>}
           </span>,
         )}
         {row("Ricorrenza", describeRecurrence(task))}
@@ -98,22 +95,6 @@ function Detail({ task, today, busy, onComplete, onPostpone, onEdit, onClose }: 
         </button>
       </div>
 
-      <div className="mt-5 border-t border-bg2 pt-4">
-        <label className="mb-1 block text-[13px] text-hint">Rimanda solo questa volta a</label>
-        <div className="flex min-w-0 gap-2">
-          <input
-            type="date"
-            className="block min-w-0 flex-1 appearance-none rounded-xl bg-bg2 px-3 py-2.5 outline-none focus:ring-2 focus:ring-accent"
-            value={postponeTo}
-            min={today}
-            onChange={(e) => setPostponeTo(e.target.value)}
-          />
-          <button type="button" disabled={busy} onClick={() => onPostpone(task, postponeTo)} className="shrink-0 rounded-xl bg-bg2 px-4 py-2.5 font-medium text-link">
-            Rimanda
-          </button>
-        </div>
-        <p className="mt-1 text-[12px] text-hint">Non tocca la ricorrenza: al prossimo completamento si riparte dalla data originale.</p>
-      </div>
     </>
   );
 }
@@ -127,7 +108,7 @@ function Form({ task, members, today, busy, onSave, onArchive, onClose }: Props)
   const [everyN, setEveryN] = useState(task?.every_n ?? 1);
   const [unit, setUnit] = useState<RecurrenceUnit>(task?.unit ?? "week");
   const [anchor, setAnchor] = useState<RecurrenceAnchor>(task?.anchor ?? "completion");
-  const [due, setDue] = useState(task?.scheduled_due ?? today);
+  const [due, setDue] = useState(task?.next_due ?? today);
   const [assignee, setAssignee] = useState(task?.assigned_to_name ?? "");
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
@@ -156,7 +137,7 @@ function Form({ task, members, today, busy, onSave, onArchive, onClose }: Props)
       input.clear_recurrence = true;
     }
     if (!task) input.first_due = due;
-    else if (due !== task.scheduled_due) input.next_due = due;
+    else if (due !== task.next_due) input.next_due = due;
     if ((task?.assigned_to_name ?? "") !== assignee) input.assigned_to = assignee;
     if (task && Object.keys(input).length === 0) return onClose();
     onSave(input);
@@ -239,7 +220,7 @@ function Form({ task, members, today, busy, onSave, onArchive, onClose }: Props)
 
       <label className={`${label} mt-3`}>{task ? "Data base della scadenza" : "Prima scadenza"}</label>
       <input type="date" className={field} value={due} onChange={(e) => setDue(e.target.value)} required />
-      {task && <p className="mt-1 text-[12px] text-hint">Cambiarla sposta la ricorrenza da ora in poi. Per un rinvio singolo usa "Rimanda" nel dettaglio.</p>}
+      {task && <p className="mt-1 text-[12px] text-hint">Cambiarla sposta la ricorrenza da ora in poi.</p>}
 
       <label className={`${label} mt-3`}>Assegnato a</label>
       <select className={field} value={assignee} onChange={(e) => setAssignee(e.target.value)}>

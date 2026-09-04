@@ -1,6 +1,6 @@
 // Webhook Telegram: comandi rapidi senza LLM, bottoni inline, e tutto il resto a Claude.
 
-import { addDays, todayAtHome } from "../_shared/dates.ts";
+import { todayAtHome } from "../_shared/dates.ts";
 import {
   appendMessage,
   completeTask,
@@ -9,19 +9,16 @@ import {
   listActiveTasks,
   listHistory,
   loadRecentMessages,
-  postponeTask,
 } from "../_shared/db.ts";
 import {
   doneKeyboard,
   eventCompleted,
-  eventPostponed,
   groupByBucket,
   HELP_TEXT,
   keyboardWithout,
   renderAgenda,
   renderCompleted,
   renderHistory,
-  renderPostponed,
 } from "../_shared/format.ts";
 import {
   allowedChatIds,
@@ -172,7 +169,7 @@ async function handleCommand(chatId: number, text: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Bottoni inline: "d:<task_id>" = fatto, "p:<task_id>" = rimanda a domani
+// Bottoni inline: "d:<task_id>" = fatto
 
 async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
   const msg = cq.message;
@@ -201,7 +198,7 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
   }
 
   // I bottoni esistono solo per task in ritardo o di oggi. Se la scadenza è già nel
-  // futuro, qualcuno l'ha già fatto o rimandato da un altro messaggio: niente doppioni.
+  // futuro, qualcuno l'ha già fatto da un altro messaggio: niente doppioni.
   if (task.next_due > today) {
     const by = task.last_done_by ? ` da ${task.last_done_by}` : "";
     await answerCallbackQuery(cq.id, task.last_done_on === today ? `Già fatto${by}` : "Già gestito");
@@ -217,16 +214,6 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
     await dropButtons();
     await broadcast(chatId, [eventCompleted(who.name, updated, today)]);
     await sendMessage(chatId, renderCompleted(who.name, updated, today));
-    return;
-  }
-
-  if (action === "p") {
-    const until = addDays(today, 1);
-    await postponeTask(task.id, until);
-    await answerCallbackQuery(cq.id, "Rimandato a domani");
-    await dropButtons();
-    await broadcast(chatId, [eventPostponed(who.name, task.title, until, today)]);
-    await sendMessage(chatId, renderPostponed(task.title, until, today));
     return;
   }
 

@@ -67,8 +67,7 @@ export function renderAgenda(
 /** Tastiera con un bottone "Fatto" per task (max `max`, per non allagare la chat). */
 export function doneKeyboard(tasks: TaskOverview[], max = 10): InlineKeyboardMarkup | undefined {
   const rows = tasks.slice(0, max).map((t) => [
-    { text: `✅ ${truncate(t.title, 28)}`, callback_data: `d:${t.id}` },
-    { text: "⏭ domani", callback_data: `p:${t.id}` },
+    { text: `✅ ${truncate(t.title, 36)}`, callback_data: `d:${t.id}` },
   ]);
   return rows.length ? { inline_keyboard: rows } : undefined;
 }
@@ -99,19 +98,11 @@ export function renderCompleted(who: string, t: TaskRow, today: IsoDate): string
   return `✅ <b>${escapeHtml(who)}</b> ha fatto: ${escapeHtml(t.title)}\n${next}`;
 }
 
-export function renderPostponed(title: string, until: IsoDate, today: IsoDate): string {
-  return `⏭ ${escapeHtml(title)} spostato a ${formatShort(until, today)}.`;
-}
-
 // Eventi in testo semplice, identici per bottoni e agente: vanno all'altra chat.
 export function eventCompleted(who: string, t: TaskRow, today: IsoDate): string {
   return t.active
     ? `✅ ${who} ha fatto: ${t.title} (prossima ${formatShort(t.next_due, today)})`
     : `✅ ${who} ha fatto: ${t.title} (una tantum, archiviato)`;
-}
-
-export function eventPostponed(who: string, title: string, until: IsoDate, today: IsoDate): string {
-  return `⏭ ${who} ha spostato "${title}" a ${formatShort(until, today)}`;
 }
 
 function truncate(s: string, n: number): string {

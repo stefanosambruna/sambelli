@@ -38,10 +38,7 @@ Ogni task ha una **prossima scadenza** (`next_due`), che è l'unica cosa usata p
 - `completion` (default): la prossima scadenza parte da quando lo fai. Sale addolcitore, lenzuola, piante.
 - `schedule`: la prossima avanza a calendario, saltando gli arretrati. Il primo del mese, ogni settembre.
 
-Senza ricorrenza il task è una tantum e si archivia quando lo completi. Rimandare un task scrive
-`postponed_until` e non tocca `next_due`: un task a calendario rimandato non perde la sua ancora, e
-il completamento successivo azzera il rinvio. La vista `task_overview` espone come `next_due` la
-data effettiva. I task non hanno un proprietario di default: chi li fa li segna. L'assegnazione
+Senza ricorrenza il task è una tantum e si archivia quando lo completi. I task non hanno un proprietario di default: chi li fa li segna. L'assegnazione
 esiste ma è l'eccezione.
 
 ## Setup
