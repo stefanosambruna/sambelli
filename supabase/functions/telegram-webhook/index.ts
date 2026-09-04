@@ -199,7 +199,7 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
 
   const task = taskId ? await getTask(taskId) : null;
 
-  if (!task || !task.active) {
+  if (!task || task.status !== "active") {
     await answerCallbackQuery(cq.id, "Questo task non c'è più");
     await dropButtons();
     return;

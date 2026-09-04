@@ -94,15 +94,15 @@ export function renderHistory(rows: CompletionRecord[], today: IsoDate): string 
 }
 
 export function renderCompleted(who: string, t: TaskRow, today: IsoDate): string {
-  const next = t.active ? `Prossima: ${formatShort(t.next_due, today)}.` : "Era una tantum: archiviato.";
+  const next = t.status === "active" ? `Prossima: ${formatShort(t.next_due, today)}.` : "Era una tantum: completata.";
   return `✅ <b>${escapeHtml(who)}</b> ha fatto: ${escapeHtml(t.title)}\n${next}`;
 }
 
 // Eventi in testo semplice, identici per bottoni e agente: vanno all'altra chat.
 export function eventCompleted(who: string, t: TaskRow, today: IsoDate): string {
-  return t.active
+  return t.status === "active"
     ? `✅ ${who} ha fatto: ${t.title} (prossima ${formatShort(t.next_due, today)})`
-    : `✅ ${who} ha fatto: ${t.title} (una tantum, archiviato)`;
+    : `✅ ${who} ha fatto: ${t.title} (una tantum, completata)`;
 }
 
 function truncate(s: string, n: number): string {

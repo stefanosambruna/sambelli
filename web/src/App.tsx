@@ -5,13 +5,15 @@ import { type Bucket, bucketFor, formatShort } from "../../supabase/functions/_s
 import { api, ApiError } from "./api.ts";
 import { Avatar } from "./components/Avatar.tsx";
 import { DoneList } from "./components/DoneList.tsx";
+import { InactiveView } from "./components/InactiveView.tsx";
+import { Menu } from "./components/Menu.tsx";
 import { Section } from "./components/Section.tsx";
 import { TaskRow } from "./components/TaskRow.tsx";
 import { TaskSheet } from "./components/TaskSheet.tsx";
 import { UndoBar } from "./components/UndoBar.tsx";
 import { usePending } from "./hooks/usePending.ts";
 import { haptic } from "./telegram.ts";
-import type { Completion, Task, TaskInput } from "./types.ts";
+import type { Completion, Task, TaskInput, TaskStatus } from "./types.ts";
 
 const BUCKETS: [Bucket, string][] = [
   ["overdue", "In ritardo"],
@@ -27,9 +29,21 @@ export function App() {
   const pending = usePending();
   const [query, setQuery] = useState("");
   const [sheet, setSheet] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
+  const [view, setView] = useState<Exclude<TaskStatus, "active"> | null>(null);
   const [undoBusy, setUndoBusy] = useState<string | null>(null);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["agenda"] });
+  const inactive = useQuery({ queryKey: ["inactive"], queryFn: api.inactive, enabled: view !== null });
+  const history = useQuery({
+    queryKey: ["history", sheet.task?.id],
+    queryFn: () => api.history(sheet.task!.id),
+    enabled: sheet.open && sheet.task !== null,
+  });
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["agenda"] });
+    qc.invalidateQueries({ queryKey: ["inactive"] });
+    qc.invalidateQueries({ queryKey: ["history"] });
+  };
   const fail = (err: unknown) => {
     haptic.warning();
     alert(err instanceof ApiError ? err.message : "Qualcosa è andato storto");
@@ -47,9 +61,18 @@ export function App() {
     onError: fail,
   });
   const archive = useMutation({
-    mutationFn: (id: string) => api.update(id, { active: false }),
+    mutationFn: (id: string) => api.archive(id),
     onSuccess: () => {
       setSheet({ open: false, task: null });
+      invalidate();
+    },
+    onError: fail,
+  });
+  const unarchive = useMutation({
+    mutationFn: (id: string) => api.unarchive(id),
+    onSuccess: () => {
+      setSheet({ open: false, task: null });
+      setView(null);
       invalidate();
     },
     onError: fail,
@@ -60,6 +83,11 @@ export function App() {
     try {
       await api.undo(c.task_id);
       haptic.success();
+      // Un done ripristinato torna in agenda: chiudo pannello e vista dei completati.
+      if (sheet.task?.id === c.task_id && sheet.task.status === "done") {
+        setSheet({ open: false, task: null });
+        setView(null);
+      }
       invalidate();
     } catch (err) {
       fail(err);
@@ -95,14 +123,17 @@ export function App() {
             {data && <Avatar member={data.me} size="lg" />}
             {data ? `Ciao ${data.me.name}` : "Sambelli"}
           </h1>
-          <button
-            type="button"
-            onClick={() => agenda.refetch()}
-            className="rounded-full p-2 text-hint active:bg-bg"
-            aria-label="Aggiorna"
-          >
-            <RefreshCw size={18} className={agenda.isFetching ? "animate-spin" : ""} />
-          </button>
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => agenda.refetch()}
+              className="rounded-full p-2 text-hint active:bg-bg"
+              aria-label="Aggiorna"
+            >
+              <RefreshCw size={18} className={agenda.isFetching ? "animate-spin" : ""} />
+            </button>
+            <Menu onDone={() => setView("done")} onArchived={() => setView("archived")} />
+          </div>
         </div>
         {today && <div className="text-[13px] text-hint">{formatShort(today)} · scorri a destra per segnare fatto</div>}
         <div className="relative mt-2">
@@ -183,19 +214,34 @@ export function App() {
 
       <UndoBar items={pending.items} onUndo={pending.undo} />
 
+      {view && (
+        <InactiveView
+          status={view}
+          tasks={inactive.data?.tasks ?? []}
+          members={inactive.data?.members ?? data?.members ?? []}
+          today={inactive.data?.today ?? today}
+          loading={inactive.isLoading}
+          onOpen={(task) => setSheet({ open: true, task })}
+          onBack={() => setView(null)}
+        />
+      )}
+
       {sheet.open && data && (
         <TaskSheet
           key={sheet.task?.id ?? "new"}
           task={sheet.task}
           members={data.members}
           today={today}
-          busy={save.isPending || archive.isPending}
+          busy={save.isPending || archive.isPending || unarchive.isPending}
           onSave={(input) => save.mutate({ id: sheet.task?.id ?? null, input })}
           onComplete={(task) => {
             setSheet({ open: false, task: null });
             pending.add(task);
           }}
-          onArchive={(task) => confirm(`Archiviare "${task.title}"?`) && archive.mutate(task.id)}
+          onArchive={(task) => confirm(`Archiviare "${task.title}"? Sparisce dall'agenda e non torna più da solo.`) && archive.mutate(task.id)}
+          onUnarchive={(task) => unarchive.mutate(task.id)}
+          onUndo={undoDone}
+          history={history.data?.history}
           onClose={() => setSheet({ open: false, task: null })}
         />
       )}

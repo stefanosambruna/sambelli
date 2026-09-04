@@ -162,7 +162,7 @@ Per il database locale: `supabase db reset` riapplica migrazioni e seed; `psql "
 
 Agenda a colpo d'occhio dentro Telegram: swipe a destra = fatto, con sei
 secondi per annullare prima che parta la notifica all'altro; tap = modifica; "+" = nuovo task;
-"Fatti oggi" con annullamento vero. Stack: Vite, React 19, TypeScript, Tailwind 4, TanStack Query.
+"Fatti oggi" con annullamento vero; menu ⋯ per Completati e Archiviati. Stack: Vite, React 19, TypeScript, Tailwind 4, TanStack Query.
 
 ```bash
 cd web && pnpm install

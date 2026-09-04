@@ -11,9 +11,11 @@ import {
   completeTask,
   createTask,
   findMemberByName,
+  getTask,
   latestCompletion,
   listActiveTasks,
   listHistory,
+  listInactiveTasks,
   listMembers,
   type Member,
   type RecurrenceAnchor,
@@ -98,7 +100,7 @@ export const TOOLS: BetaTool[] = [
   {
     name: "update_task",
     description:
-      "Modifica un task esistente: titolo, note, ricorrenza, data base della scadenza, assegnazione, oppure archivialo con active=false. Passa solo i campi da cambiare. next_due cambia la scadenza e, per i task a calendario, l'ancora della ricorrenza da ora in poi.",
+      "Modifica un task esistente: titolo, note, parametri della ricorrenza, data della scadenza, assegnazione. Passa solo i campi da cambiare. Non può trasformare una tantum in ricorrente o viceversa: per quello si archivia e si crea un task nuovo. Per archiviare usa archive_task.",
     input_schema: {
       type: "object",
       properties: {
@@ -116,8 +118,6 @@ export const TOOLS: BetaTool[] = [
           type: "string",
           description: "Nome del membro, oppure stringa vuota per togliere l'assegnazione",
         },
-        clear_recurrence: { type: "boolean", description: "true per renderlo una tantum" },
-        active: { type: "boolean", description: "false per archiviare" },
       },
       required: ["task_id"],
       additionalProperties: false,
@@ -137,9 +137,37 @@ export const TOOLS: BetaTool[] = [
     },
   },
   {
+    name: "archive_task",
+    description:
+      "Archivia un task attivo: sparisce dall'agenda e non torna più da solo. Per 'non lo facciamo più', 'togli', 'elimina'.",
+    input_schema: {
+      type: "object",
+      properties: { task_id: { type: "string" } },
+      required: ["task_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "unarchive_task",
+    description:
+      "Riporta in agenda un task archiviato, com'era (stessa scadenza). Usa list_inactive per trovarne l'id.",
+    input_schema: {
+      type: "object",
+      properties: { task_id: { type: "string" } },
+      required: ["task_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_inactive",
+    description:
+      "Elenca i task fuori dall'agenda: completati (una tantum già fatte) e archiviati. Serve per ritrovarne l'id.",
+    input_schema: { type: "object", properties: {}, required: [], additionalProperties: false },
+  },
+  {
     name: "undo_completion",
     description:
-      "Annulla l'ultimo completamento di un task ('non era vero', 'annulla le lenzuola'): il task torna com'era prima e il completamento sparisce dallo storico. Vale solo per l'ultimo completamento di quel task.",
+      "Ripristina: annulla l'ultimo completamento di un task ('non era vero', 'annulla le lenzuola', 'ripristina'). Il task torna com'era prima e il completamento sparisce dallo storico. Vale solo per l'ultimo completamento.",
     input_schema: {
       type: "object",
       properties: {
@@ -222,7 +250,7 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
         title: task.title,
         done_by: by.name,
         next_due: updated.next_due,
-        active: updated.active,
+        status: updated.status,
       });
     }
     case "create_task": {
@@ -251,27 +279,21 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
     }
     case "update_task": {
       const task = requireTask(ctx, str(input, "task_id"));
+      if (task.status !== "active") throw new Error(`"${task.title}" non è in agenda: prima riattivalo o ripristinalo`);
       const patch: Parameters<typeof updateTask>[1] = {};
       const title = str(input, "title");
       if (title) patch.title = title;
       if (typeof input.notes === "string") patch.notes = input.notes || null;
-      if (input.clear_recurrence === true) {
-        patch.every_n = null;
-        patch.unit = null;
-      } else {
-        const everyN = num(input, "every_n");
-        const unit = str(input, "unit") as RecurrenceUnit | undefined;
-        if (everyN !== undefined) patch.every_n = everyN;
-        if (unit) patch.unit = unit;
-        const half = (patch.every_n === undefined) !== (patch.unit === undefined);
-        if (half && task.every_n === null) {
-          // Stessa regola di create_task: una ricorrenza nuova va detta per intero.
-          throw new Error("every_n e unit vanno passati insieme (o nessuno dei due)");
-        }
-        // Task già ricorrente: completa la metà mancante con il valore attuale.
-        if (patch.every_n !== undefined && patch.unit === undefined) patch.unit = task.unit!;
-        if (patch.unit !== undefined && patch.every_n === undefined) patch.every_n = task.every_n!;
+      const everyN = num(input, "every_n");
+      const unit = str(input, "unit") as RecurrenceUnit | undefined;
+      if ((everyN !== undefined || unit) && task.every_n === null) {
+        // Il tipo è fisso: una tantum resta una tantum.
+        throw new Error(`"${task.title}" è una tantum: per renderlo ricorrente archivialo e creane uno nuovo`);
       }
+      if (everyN !== undefined) patch.every_n = everyN;
+      if (unit) patch.unit = unit;
+      if (patch.every_n !== undefined && patch.unit === undefined) patch.unit = task.unit!;
+      if (patch.unit !== undefined && patch.every_n === undefined) patch.every_n = task.every_n!;
       const anchor = str(input, "anchor") as RecurrenceAnchor | undefined;
       if (anchor) patch.anchor = anchor;
       const nextDue = date(input, "next_due");
@@ -281,28 +303,46 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
       if (typeof input.assigned_to === "string") {
         patch.assigned_to = input.assigned_to === "" ? null : resolveMember(ctx, input.assigned_to)!.id;
       }
-      if (typeof input.active === "boolean") patch.active = input.active;
       if (Object.keys(patch).length === 0) throw new Error("Nessun campo da modificare");
       const updated = await updateTask(task.id, patch);
-      if (patch.active === false) {
-        ctx.events.push(`🗄 ${ctx.sender.name} ha archiviato "${task.title}"`);
-      } else {
-        // All'altra persona serve sapere COSA è cambiato, non solo che è cambiato.
-        const changes: string[] = [];
-        if (patch.title) changes.push(`titolo → ${updated.title}`);
-        if ("notes" in patch) changes.push("note aggiornate");
-        if ("every_n" in patch || "unit" in patch || patch.anchor) {
-          changes.push(`ricorrenza → ${describeRecurrence(updated)}`);
-        }
-        if (patch.next_due) changes.push(`scadenza → ${formatShort(updated.next_due, ctx.today)}`);
-        if ("assigned_to" in patch) {
-          const who = patch.assigned_to ? ctx.members.find((m) => m.id === patch.assigned_to)?.name : undefined;
-          changes.push(who ? `assegnato a ${who}` : "assegnazione tolta");
-        }
-        if (patch.active === true) changes.push("riattivato");
-        ctx.events.push(`✏️ ${ctx.sender.name} ha modificato "${task.title}": ${changes.join(", ")}`);
+      // All'altra persona serve sapere COSA è cambiato, non solo che è cambiato.
+      const changes: string[] = [];
+      if (patch.title) changes.push(`titolo → ${updated.title}`);
+      if ("notes" in patch) changes.push("note aggiornate");
+      if ("every_n" in patch || "unit" in patch || patch.anchor) {
+        changes.push(`ricorrenza → ${describeRecurrence(updated)}`);
       }
+      if (patch.next_due) changes.push(`scadenza → ${formatShort(updated.next_due, ctx.today)}`);
+      if ("assigned_to" in patch) {
+        const who = patch.assigned_to ? ctx.members.find((m) => m.id === patch.assigned_to)?.name : undefined;
+        changes.push(who ? `assegnato a ${who}` : "assegnazione tolta");
+      }
+      ctx.events.push(`✏️ ${ctx.sender.name} ha modificato "${task.title}": ${changes.join(", ")}`);
       return JSON.stringify({ ok: true, task: updated });
+    }
+    case "archive_task": {
+      const task = requireTask(ctx, str(input, "task_id"));
+      const updated = await updateTask(task.id, { status: "archived" });
+      ctx.events.push(`🗄 ${ctx.sender.name} ha archiviato "${task.title}"`);
+      return JSON.stringify({ ok: true, title: updated.title, status: updated.status });
+    }
+    case "unarchive_task": {
+      const id = str(input, "task_id");
+      if (!id) throw new Error("task_id obbligatorio");
+      const task = await getTask(id);
+      if (!task) throw new Error("task sconosciuto");
+      if (task.status !== "archived") throw new Error(`"${task.title}" non è archiviato (${task.status})`);
+      const updated = await updateTask(task.id, { status: "active" });
+      ctx.events.push(
+        `♻️ ${ctx.sender.name} ha riattivato "${updated.title}" (scade ${formatShort(updated.next_due, ctx.today)})`,
+      );
+      return JSON.stringify({ ok: true, title: updated.title, next_due: updated.next_due });
+    }
+    case "list_inactive": {
+      const rows = await listInactiveTasks();
+      return JSON.stringify(
+        rows.map((t) => ({ id: t.id, title: t.title, status: t.status, last_done_on: t.last_done_on })),
+      );
     }
     case "undo_completion": {
       const taskId = str(input, "task_id");
@@ -313,9 +353,9 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
       const restored = await undoCompletion(last.id);
       const back = restored.next_due;
       ctx.events.push(
-        `↩️ ${ctx.sender.name} ha annullato: ${restored.title} (torna a ${formatShort(back, ctx.today)})`,
+        `↩️ ${ctx.sender.name} ha ripristinato: ${restored.title} (torna a ${formatShort(back, ctx.today)})`,
       );
-      return JSON.stringify({ ok: true, title: restored.title, next_due: back, active: restored.active });
+      return JSON.stringify({ ok: true, title: restored.title, next_due: back, status: restored.status });
     }
     case "rename_member": {
       const name = str(input, "name")?.trim();

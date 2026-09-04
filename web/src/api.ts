@@ -1,5 +1,5 @@
 import { initData } from "./telegram.ts";
-import type { Agenda, Task, TaskInput } from "./types.ts";
+import type { Agenda, Completion, Inactive, Task, TaskInput } from "./types.ts";
 
 const BASE = import.meta.env.VITE_API_URL as string;
 const DEV_USER = import.meta.env.VITE_DEV_USER_ID as string | undefined;
@@ -29,6 +29,10 @@ async function call<T>(method: string, path: string, body?: unknown, opts: { kee
 
 export const api = {
   agenda: () => call<Agenda>("GET", "/agenda"),
+  inactive: () => call<Inactive>("GET", "/inactive"),
+  history: (id: string) => call<{ history: Completion[] }>("GET", `/tasks/${id}/history`),
+  archive: (id: string) => call<{ ok: true }>("POST", `/tasks/${id}/archive`),
+  unarchive: (id: string) => call<{ ok: true }>("POST", `/tasks/${id}/unarchive`),
   complete: (id: string, keepalive = false) =>
     call<{ ok: true; next_due: string; active: boolean; completion_id: string | null }>("POST", `/tasks/${id}/complete`, {}, { keepalive }),
   undo: (id: string) => call<{ ok: true; next_due: string; active: boolean }>("POST", `/tasks/${id}/undo`),

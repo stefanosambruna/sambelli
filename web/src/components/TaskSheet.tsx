@@ -1,8 +1,8 @@
-import { Check, Pencil, X } from "lucide-react";
+import { Archive, Check, Pencil, RotateCcw, Undo2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
 import { describeRecurrence } from "../lib/format.ts";
-import type { Member, RecurrenceAnchor, RecurrenceUnit, Task, TaskInput } from "../types.ts";
+import type { Completion, Member, RecurrenceAnchor, RecurrenceUnit, Task, TaskInput } from "../types.ts";
 import { Avatar } from "./Avatar.tsx";
 
 interface Props {
@@ -10,9 +10,12 @@ interface Props {
   members: Member[];
   today: string;
   busy: boolean;
+  history: Completion[] | undefined; // undefined = ancora in caricamento
   onSave: (input: TaskInput) => void;
   onComplete: (task: Task) => void;
   onArchive: (task: Task) => void;
+  onUnarchive: (task: Task) => void;
+  onUndo: (completion: Completion) => void;
   onClose: () => void;
 }
 
@@ -46,7 +49,16 @@ export function TaskSheet(props: Props) {
 
 // ---------------------------------------------------------------------------
 
-function Detail({ task, members, today, busy, onComplete, onEdit, onClose }: Props & { task: Task; onEdit: () => void }) {
+const STATUS_LABEL = {
+  done: { text: "Completato", className: "bg-done/15 text-done" },
+  archived: { text: "Archiviato", className: "bg-hint/20 text-hint" },
+} as const;
+
+function Detail(
+  { task, members, today, busy, history, onComplete, onArchive, onUnarchive, onUndo, onEdit, onClose }:
+    & Props
+    & { task: Task; onEdit: () => void },
+) {
   const byName = (name: string | null) => (name ? members.find((m) => m.name === name) : undefined);
   const who = (name: string | null) => (
     <span className="inline-flex items-center gap-1.5">
@@ -54,68 +66,137 @@ function Detail({ task, members, today, busy, onComplete, onEdit, onClose }: Pro
       {name}
     </span>
   );
-  const overdue = task.next_due < today;
+  const overdue = task.status === "active" && task.next_due < today;
+  const badge = task.status !== "active" ? STATUS_LABEL[task.status] : null;
 
   const row = (label: string, value: React.ReactNode) => (
     <div className="flex items-baseline justify-between gap-4 py-2.5">
       <span className="shrink-0 text-[14px] text-hint">{label}</span>
-      <span className="min-w-0 text-right text-[15px] break-words">{value}</span>
+      <span className="min-w-0 break-words text-right text-[15px]">{value}</span>
     </div>
   );
 
   return (
     <>
       <div className="mb-3 flex items-start justify-between gap-3">
-        <h2 className="min-w-0 text-[22px] font-semibold leading-7 break-words">{task.title}</h2>
+        <div className="min-w-0">
+          {badge && (
+            <span className={`mb-1.5 inline-block rounded-md px-2 py-0.5 text-[12px] font-medium ${badge.className}`}>{badge.text}</span>
+          )}
+          <h2 className="min-w-0 break-words text-[22px] font-semibold leading-7">{task.title}</h2>
+        </div>
         <button type="button" onClick={onClose} className="shrink-0 rounded-full p-1 text-hint active:bg-bg2" aria-label="Chiudi">
           <X size={22} />
         </button>
       </div>
 
       {task.notes && (
-        <p className="mb-4 rounded-xl bg-bg2 px-3 py-2.5 text-[15px] leading-6 whitespace-pre-wrap break-words">{task.notes}</p>
+        <p className="mb-4 whitespace-pre-wrap break-words rounded-xl bg-bg2 px-3 py-2.5 text-[15px] leading-6">{task.notes}</p>
       )}
 
       <div className="divide-y divide-bg2 rounded-xl bg-card px-3">
-        {row(
-          "Scadenza",
-          <span className={overdue ? "font-semibold text-danger" : ""}>
-            {formatShort(task.next_due, today)} · {formatRelative(task.next_due, today)}
-          </span>,
-        )}
+        {task.status === "active" &&
+          row(
+            "Scadenza",
+            <span className={overdue ? "font-semibold text-danger" : ""}>
+              {formatShort(task.next_due, today)} · {formatRelative(task.next_due, today)}
+            </span>,
+          )}
         {row("Ricorrenza", describeRecurrence(task))}
         {row("Assegnato a", task.assigned_to_name ? who(task.assigned_to_name) : "chi se lo prende")}
-        {row(
-          "Ultima volta",
-          task.last_done_on
-            ? <span className="inline-flex items-center gap-1.5">{formatShort(task.last_done_on, today)}{task.last_done_by && <> · {who(task.last_done_by)}</>}</span>
-            : "mai",
-        )}
       </div>
 
-      <div className="mt-4 flex gap-2">
+      {task.status === "active"
+        ? (
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onComplete(task)}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-done py-3 text-[17px] font-semibold text-white disabled:opacity-60"
+            >
+              <Check size={20} /> Fatto
+            </button>
+            <button type="button" onClick={onEdit} className="flex items-center justify-center gap-2 rounded-xl bg-bg2 px-4 py-3 text-[17px] font-medium">
+              <Pencil size={18} /> Modifica
+            </button>
+          </div>
+        )
+        : task.status === "archived"
+        ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onUnarchive(task)}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3 text-[17px] font-semibold text-accent-fg disabled:opacity-60"
+          >
+            <RotateCcw size={20} /> Riattiva
+          </button>
+        )
+        : (
+          <button
+            type="button"
+            disabled={busy || !history?.[0]?.undoable}
+            onClick={() => history?.[0] && onUndo(history[0])}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-3 text-[17px] font-semibold text-accent-fg disabled:opacity-60"
+          >
+            <Undo2 size={20} /> Ripristina
+          </button>
+        )}
+
+      {task.status === "active" && (
         <button
           type="button"
           disabled={busy}
-          onClick={() => onComplete(task)}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-done py-3 text-[17px] font-semibold text-white disabled:opacity-60"
+          onClick={() => onArchive(task)}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[15px] text-hint active:bg-bg2"
         >
-          <Check size={20} /> Fatto
+          <Archive size={16} /> Archivia
         </button>
-        <button type="button" onClick={onEdit} className="flex items-center justify-center gap-2 rounded-xl bg-bg2 px-4 py-3 text-[17px] font-medium">
-          <Pencil size={18} /> Modifica
-        </button>
-      </div>
+      )}
 
+      <div className="mt-6">
+        <h3 className="mb-1.5 text-[13px] font-semibold uppercase tracking-wide text-hint">Storico</h3>
+        {history === undefined
+          ? <p className="py-2 text-[15px] text-hint">Carico…</p>
+          : history.length === 0
+          ? <p className="py-2 text-[15px] text-hint">Mai completato.</p>
+          : (
+            <div className="divide-y divide-bg2 rounded-xl bg-card px-3">
+              {history.map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="flex min-w-0 items-center gap-2 text-[15px]">
+                    <Avatar member={members.find((m) => m.id === c.member_id)} />
+                    <span className="truncate">
+                      {formatShort(c.done_on, today)}
+                      {c.member_name ? ` · ${c.member_name}` : ""}
+                    </span>
+                  </span>
+                  {c.undoable && task.status === "active" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onUndo(c)}
+                      className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[14px] text-link active:bg-bg2 disabled:opacity-50"
+                    >
+                      <Undo2 size={15} /> Annulla
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
 
-function Form({ task, members, today, busy, onSave, onArchive, onCancel }: Props & { onCancel: () => void }) {
+function Form({ task, members, today, busy, onSave, onCancel }: Props & { onCancel: () => void }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [notes, setNotes] = useState(task?.notes ?? "");
+  // Il tipo (una tantum / ricorrente) si sceglie alla creazione e non cambia più.
   const [recurring, setRecurring] = useState(!!task?.every_n);
   const [everyN, setEveryN] = useState(task?.every_n ?? 1);
   const [unit, setUnit] = useState<RecurrenceUnit>(task?.unit ?? "week");
@@ -145,8 +226,6 @@ function Form({ task, members, today, busy, onSave, onArchive, onCancel }: Props
         input.unit = unit;
       }
       if (!task || task.anchor !== anchor) input.anchor = anchor;
-    } else if (task?.every_n) {
-      input.clear_recurrence = true;
     }
     if (!task) input.first_due = due;
     else if (due !== task.next_due) input.next_due = due;
@@ -181,58 +260,39 @@ function Form({ task, members, today, busy, onSave, onArchive, onCancel }: Props
         rows={3}
       />
 
-      <div className="mt-4 flex items-center justify-between">
-        <span className="text-[15px]">Ricorrente</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={recurring}
-          onClick={() => setRecurring(!recurring)}
-          className={`h-7 w-12 rounded-full p-0.5 transition-colors ${recurring ? "bg-accent" : "bg-hint/40"}`}
-        >
-          <span className={`block h-6 w-6 rounded-full bg-white shadow transition-transform ${recurring ? "translate-x-5" : ""}`} />
-        </button>
-      </div>
-
-      {recurring && (
-        <div className="mt-3 rounded-xl bg-bg2 p-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[15px]">ogni</span>
-            <input
-              type="number"
-              min={1}
-              inputMode="numeric"
-              className="w-16 min-w-0 appearance-none rounded-lg bg-bg px-2 py-1.5 text-center"
-              value={everyN}
-              onChange={(e) => setEveryN(Math.max(1, Number(e.target.value) || 1))}
-            />
-            <select className="min-w-0 flex-1 appearance-none rounded-lg bg-bg px-2 py-1.5" value={unit} onChange={(e) => setUnit(e.target.value as RecurrenceUnit)}>
-              {UNITS.map(([u, l]) => <option key={u} value={u}>{l}</option>)}
-            </select>
+      {task
+        ? recurring && (
+          <div className="mt-4 rounded-xl bg-bg2 p-3">
+            <Recurrence everyN={everyN} setEveryN={setEveryN} unit={unit} setUnit={setUnit} anchor={anchor} setAnchor={setAnchor} />
           </div>
-          <div className="mt-2 flex gap-2">
-            {([["completion", "da quando lo fai"], ["schedule", "a calendario"]] as [RecurrenceAnchor, string][]).map(([a, l]) => (
+        )
+        : (
+          <>
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-[15px]">Ricorrente</span>
               <button
-                key={a}
                 type="button"
-                onClick={() => setAnchor(a)}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-[14px] ${anchor === a ? "bg-accent text-accent-fg" : "bg-bg"}`}
+                role="switch"
+                aria-checked={recurring}
+                onClick={() => setRecurring(!recurring)}
+                className={`h-7 w-12 rounded-full p-0.5 transition-colors ${recurring ? "bg-accent" : "bg-hint/40"}`}
               >
-                {l}
+                <span className={`block h-6 w-6 rounded-full bg-white shadow transition-transform ${recurring ? "translate-x-5" : ""}`} />
               </button>
-            ))}
-          </div>
-          <p className="mt-2 text-[12px] text-hint">
-            {anchor === "completion"
-              ? "La prossima scadenza parte dal giorno in cui lo completi (sale, lenzuola, piante)."
-              : "La prossima scadenza avanza a date fisse, anche se lo fai prima o dopo (il primo del mese)."}
-          </p>
-        </div>
-      )}
+            </div>
+            {recurring && (
+              <div className="mt-3 rounded-xl bg-bg2 p-3">
+                <Recurrence everyN={everyN} setEveryN={setEveryN} unit={unit} setUnit={setUnit} anchor={anchor} setAnchor={setAnchor} />
+              </div>
+            )}
+            <p className="mt-2 text-[12px] text-hint">
+              Il tipo non si cambia più dopo: per trasformare un task si archivia e se ne crea uno nuovo.
+            </p>
+          </>
+        )}
 
-      <label className={`${label} mt-3`}>{task ? "Data base della scadenza" : "Prima scadenza"}</label>
+      <label className={`${label} mt-3`}>{task ? "Scadenza" : "Prima scadenza"}</label>
       <input type="date" className={field} value={due} onChange={(e) => setDue(e.target.value)} required />
-      {task && <p className="mt-1 text-[12px] text-hint">Cambiarla sposta la ricorrenza da ora in poi.</p>}
 
       <label className={`${label} mt-3`}>Assegnato a</label>
       <select className={field} value={assignee} onChange={(e) => setAssignee(e.target.value)}>
@@ -243,12 +303,51 @@ function Form({ task, members, today, busy, onSave, onArchive, onCancel }: Props
       <button type="submit" disabled={busy} className="mt-5 w-full rounded-xl bg-accent py-3 text-[17px] font-semibold text-accent-fg disabled:opacity-60">
         {task ? "Salva" : "Aggiungi"}
       </button>
-
-      {task && (
-        <button type="button" disabled={busy} onClick={() => onArchive(task)} className="mt-3 w-full rounded-xl py-3 text-[15px] text-danger active:bg-bg2">
-          Archivia task
-        </button>
-      )}
     </form>
+  );
+}
+
+function Recurrence({ everyN, setEveryN, unit, setUnit, anchor, setAnchor }: {
+  everyN: number;
+  setEveryN: (n: number) => void;
+  unit: RecurrenceUnit;
+  setUnit: (u: RecurrenceUnit) => void;
+  anchor: RecurrenceAnchor;
+  setAnchor: (a: RecurrenceAnchor) => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <span className="text-[15px]">ogni</span>
+        <input
+          type="number"
+          min={1}
+          inputMode="numeric"
+          className="w-16 min-w-0 appearance-none rounded-lg bg-bg px-2 py-1.5 text-center"
+          value={everyN}
+          onChange={(e) => setEveryN(Math.max(1, Number(e.target.value) || 1))}
+        />
+        <select className="min-w-0 flex-1 appearance-none rounded-lg bg-bg px-2 py-1.5" value={unit} onChange={(e) => setUnit(e.target.value as RecurrenceUnit)}>
+          {UNITS.map(([u, l]) => <option key={u} value={u}>{l}</option>)}
+        </select>
+      </div>
+      <div className="mt-2 flex gap-2">
+        {([["completion", "da quando lo fai"], ["schedule", "a calendario"]] as [RecurrenceAnchor, string][]).map(([a, l]) => (
+          <button
+            key={a}
+            type="button"
+            onClick={() => setAnchor(a)}
+            className={`flex-1 rounded-lg px-2 py-1.5 text-[14px] ${anchor === a ? "bg-accent text-accent-fg" : "bg-bg"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-[12px] text-hint">
+        {anchor === "completion"
+          ? "La prossima scadenza parte dal giorno in cui lo completi (sale, lenzuola, piante)."
+          : "La prossima scadenza avanza a date fisse, anche se lo fai prima o dopo (il primo del mese)."}
+      </p>
+    </>
   );
 }

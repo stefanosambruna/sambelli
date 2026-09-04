@@ -2,6 +2,8 @@
 export type IsoDate = string;
 export type RecurrenceUnit = "day" | "week" | "month" | "year";
 export type RecurrenceAnchor = "completion" | "schedule";
+/** active = in agenda · done = una tantum completata · archived = archiviata a mano */
+export type TaskStatus = "active" | "done" | "archived";
 
 export interface Member {
   id: string;
@@ -20,7 +22,7 @@ export interface Task {
   next_due: IsoDate;
   assigned_to: string | null;
   assigned_to_name: string | null;
-  active: boolean;
+  status: TaskStatus;
   last_done_on: IsoDate | null;
   last_done_by: string | null;
 }
@@ -53,6 +55,10 @@ export interface TaskInput {
   first_due?: IsoDate;
   next_due?: IsoDate;
   assigned_to?: string;
-  clear_recurrence?: boolean;
-  active?: boolean;
+}
+
+export interface Inactive {
+  today: IsoDate;
+  tasks: Task[];
+  members: Member[];
 }

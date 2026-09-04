@@ -4,10 +4,14 @@
 // eventi e notifiche all'altra persona sono identici a quelli del bot.
 //
 //   GET   /agenda                      task attivi, membri, completamenti di oggi
+//   GET   /inactive                    task completati e archiviati
+//   GET   /tasks/:id/history           completamenti di un task, dal più recente
 //   POST  /tasks                       crea (body = input di create_task)
 //   PATCH /tasks/:id                   modifica (body = input di update_task senza task_id)
 //   POST  /tasks/:id/complete          segna fatto oggi
-//   POST  /tasks/:id/undo              annulla l'ultimo completamento
+//   POST  /tasks/:id/undo              ripristina: annulla l'ultimo completamento
+//   POST  /tasks/:id/archive           archivia
+//   POST  /tasks/:id/unarchive         riporta in agenda un archiviato
 
 import { type AgentContext, executeTool } from "../_shared/agent.ts";
 import { todayAtHome } from "../_shared/dates.ts";
@@ -16,6 +20,7 @@ import {
   latestCompletion,
   listActiveTasks,
   listHistory,
+  listInactiveTasks,
   listMembers,
   type Member,
 } from "../_shared/db.ts";
@@ -135,8 +140,9 @@ async function authenticate(req: Request): Promise<Member> {
 // Mutazioni: stesso percorso dell'agente, così eventi e notifiche coincidono.
 
 async function mutate(me: Member, tool: string, input: Record<string, unknown>): Promise<unknown> {
-  const [members, tasks] = await Promise.all([listMembers(), listActiveTasks()]);
-  const ctx: AgentContext = { today: todayAtHome(), sender: me, members, tasks, events: [] };
+  // Il contesto include anche i task fuori agenda: l'app agisce anche su quelli.
+  const [members, active, inactive] = await Promise.all([listMembers(), listActiveTasks(), listInactiveTasks()]);
+  const ctx: AgentContext = { today: todayAtHome(), sender: me, members, tasks: [...active, ...inactive], events: [] };
   let out: string;
   try {
     out = await executeTool(ctx, tool, input);
@@ -184,6 +190,11 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (req.method === "GET" && path === "/inactive") {
+      const [tasks, members] = await Promise.all([listInactiveTasks(), listMembers()]);
+      return json(req, { today: todayAtHome(), tasks, members: await withAvatars(members) });
+    }
+
     if (req.method === "POST" && path === "/tasks") {
       return json(req, await mutate(me, "create_task", await readBody(req)), 201);
     }
@@ -200,6 +211,15 @@ Deno.serve(async (req) => {
       }
       if (req.method === "POST" && seg[2] === "undo") {
         return json(req, await mutate(me, "undo_completion", { task_id: id }));
+      }
+      if (req.method === "POST" && seg[2] === "archive") {
+        return json(req, await mutate(me, "archive_task", { task_id: id }));
+      }
+      if (req.method === "POST" && seg[2] === "unarchive") {
+        return json(req, await mutate(me, "unarchive_task", { task_id: id }));
+      }
+      if (req.method === "GET" && seg[2] === "history") {
+        return json(req, { history: await listHistory({ taskId: id, limit: 50 }) });
       }
     }
 

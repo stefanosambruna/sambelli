@@ -3,6 +3,8 @@ import { type IsoDate, todayAtHome } from "./dates.ts";
 
 export type RecurrenceUnit = "day" | "week" | "month" | "year";
 export type RecurrenceAnchor = "completion" | "schedule";
+/** active = in agenda · done = una tantum completata · archived = spenta a mano */
+export type TaskStatus = "active" | "done" | "archived";
 
 export interface Member {
   id: string;
@@ -20,12 +22,11 @@ export interface TaskRow {
   next_due: IsoDate;
   postponed_until: IsoDate | null;
   assigned_to: string | null;
-  active: boolean;
+  status: TaskStatus;
 }
 
-/** Riga della vista task_overview (scheduled_due/postponed_until: colonne storiche, oggi coincidono con next_due). */
-export interface TaskOverview extends TaskRow {
-  scheduled_due: IsoDate;
+/** Riga della vista task_overview: next_due è già la data effettiva. */
+export interface TaskOverview extends Omit<TaskRow, "postponed_until"> {
   assigned_to_name: string | null;
   last_done_on: IsoDate | null;
   last_done_by: string | null;
@@ -59,7 +60,7 @@ export interface TaskInput {
   created_by?: string | null;
 }
 
-export type TaskPatch = Partial<Omit<TaskInput, "created_by">> & { active?: boolean; postponed_until?: IsoDate | null };
+export type TaskPatch = Partial<Omit<TaskInput, "created_by">> & { status?: TaskStatus };
 
 let cached: SupabaseClient | undefined;
 
@@ -137,16 +138,26 @@ export function findMemberByName(members: Member[], name: string): Member | unde
 // ---------------------------------------------------------------------------
 
 const OVERVIEW_COLUMNS =
-  "id, title, notes, every_n, unit, anchor, next_due, scheduled_due, postponed_until, assigned_to, active, assigned_to_name, last_done_on, last_done_by";
+  "id, title, notes, every_n, unit, anchor, next_due, status, assigned_to, assigned_to_name, last_done_on, last_done_by, updated_at";
 
 export async function listActiveTasks(): Promise<TaskOverview[]> {
   const res = await db()
     .from("task_overview")
     .select(OVERVIEW_COLUMNS)
-    .eq("active", true)
+    .eq("status", "active")
     .order("next_due")
     .order("title");
   return unwrap(res, "listActiveTasks") as TaskOverview[];
+}
+
+/** Completati e archiviati, dal più recente: vivono fuori dall'agenda. */
+export async function listInactiveTasks(): Promise<TaskOverview[]> {
+  const res = await db()
+    .from("task_overview")
+    .select(OVERVIEW_COLUMNS)
+    .neq("status", "active")
+    .order("updated_at", { ascending: false });
+  return unwrap(res, "listInactiveTasks") as TaskOverview[];
 }
 
 export async function getTask(id: string): Promise<TaskOverview | null> {
