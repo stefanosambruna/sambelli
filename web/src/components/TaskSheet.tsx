@@ -103,7 +103,7 @@ function Detail({ task, today, busy, onComplete, onEdit, onClose }: Props & { ta
 
 // ---------------------------------------------------------------------------
 
-function Form({ task, members, today, busy, onSave, onArchive, onClose, onCancel }: Props & { onCancel: () => void }) {
+function Form({ task, members, today, busy, onSave, onArchive, onCancel }: Props & { onCancel: () => void }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [notes, setNotes] = useState(task?.notes ?? "");
   const [recurring, setRecurring] = useState(!!task?.every_n);
