@@ -137,8 +137,18 @@ export function App() {
           </div>
         )}
 
-        {data && visibleCount === 0 && doneToday.length === 0 && (
-          <p className="px-4 py-8 text-center text-hint">{q ? "Nessun task con questo nome." : "Niente da fare 🎉"}</p>
+        {data && q && visibleCount === 0 && doneToday.length === 0 && (
+          <p className="px-4 py-8 text-center text-hint">Nessun task con questo nome.</p>
+        )}
+
+        {/* "Oggi" c'è sempre: vuota vuol dire che oggi non c'è niente da fare, e va detto. */}
+        {data && !q && !grouped.get("overdue")?.length && !grouped.get("today")?.length && (
+          <Section title="Oggi">
+            <div className="px-4 py-5 text-center text-hint">
+              Niente da fare oggi 🎉
+              {doneToday.length > 0 && <div className="mt-1 text-[13px]">Già fatte {doneToday.length} cose, vedi in fondo.</div>}
+            </div>
+          </Section>
         )}
 
         {BUCKETS.map(([b, label]) => {
