@@ -3,6 +3,7 @@ import { Plus, RefreshCw, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { type Bucket, bucketFor, formatShort } from "../../supabase/functions/_shared/dates.ts";
 import { api, ApiError } from "./api.ts";
+import { Avatar } from "./components/Avatar.tsx";
 import { DoneList } from "./components/DoneList.tsx";
 import { Section } from "./components/Section.tsx";
 import { TaskRow } from "./components/TaskRow.tsx";
@@ -91,7 +92,8 @@ export function App() {
     <div className="min-h-dvh pb-32">
       <header className="sticky top-0 z-30 bg-bg2/95 px-4 pt-[max(env(safe-area-inset-top),12px)] pb-2 backdrop-blur">
         <div className="flex items-baseline justify-between">
-          <h1 className="text-[26px] font-bold tracking-tight">
+          <h1 className="flex items-center gap-2.5 text-[26px] font-bold tracking-tight">
+            {data && <Avatar member={data.me} size="lg" />}
             {data ? `Ciao ${data.me.name}` : "Sambelli"}
           </h1>
           <button
@@ -152,6 +154,7 @@ export function App() {
                 <TaskRow
                   key={t.id}
                   task={t}
+                  members={data?.members ?? []}
                   today={today}
                   overdue={b === "overdue"}
                   onComplete={(task) => pending.add(task)}
@@ -164,12 +167,12 @@ export function App() {
 
         {doneToday.length > 0 && (
           <Section title="Fatti oggi" count={doneToday.length}>
-            <DoneList items={doneToday} today={today} onUndo={undoDone} busyId={undoBusy} />
+            <DoneList items={doneToday} members={data?.members ?? []} today={today} onUndo={undoDone} busyId={undoBusy} />
           </Section>
         )}
         {doneEarlier.length > 0 && (
           <Section title="Ultimi 7 giorni">
-            <DoneList items={doneEarlier} today={today} showDate onUndo={undoDone} busyId={undoBusy} />
+            <DoneList items={doneEarlier} members={data?.members ?? []} today={today} showDate onUndo={undoDone} busyId={undoBusy} />
           </Section>
         )}
       </main>

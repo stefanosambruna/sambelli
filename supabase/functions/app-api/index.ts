@@ -20,6 +20,18 @@ import {
   type Member,
 } from "../_shared/db.ts";
 import { broadcast, isChatAllowed } from "../_shared/telegram.ts";
+import { db } from "../_shared/db.ts";
+
+const AVATAR_TTL_S = 6 * 3600;
+
+/** URL firmati (bucket privato "avatars", file <telegram_user_id>.jpg). Manca il file = null. */
+async function withAvatars<T extends Member>(members: T[]): Promise<(T & { avatar_url: string | null })[]> {
+  return Promise.all(members.map(async (m) => {
+    if (m.telegram_user_id === null) return { ...m, avatar_url: null };
+    const { data } = await db().storage.from("avatars").createSignedUrl(`${m.telegram_user_id}.jpg`, AVATAR_TTL_S);
+    return { ...m, avatar_url: data?.signedUrl ?? null };
+  }));
+}
 
 const INIT_DATA_MAX_AGE_S = 24 * 3600;
 
@@ -162,7 +174,14 @@ Deno.serve(async (req) => {
         listMembers(),
         listHistory({ since: addDays(today, -7), limit: 100 }),
       ]);
-      return json(req, { today, me, members, tasks, history });
+      const withPics = await withAvatars(members);
+      return json(req, {
+        today,
+        me: withPics.find((m) => m.id === me.id) ?? { ...me, avatar_url: null },
+        members: withPics,
+        tasks,
+        history,
+      });
     }
 
     if (req.method === "POST" && path === "/tasks") {

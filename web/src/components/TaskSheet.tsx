@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
 import { describeRecurrence } from "../lib/format.ts";
 import type { Member, RecurrenceAnchor, RecurrenceUnit, Task, TaskInput } from "../types.ts";
+import { Avatar } from "./Avatar.tsx";
 
 interface Props {
   task: Task | null; // null = nuovo
@@ -45,7 +46,14 @@ export function TaskSheet(props: Props) {
 
 // ---------------------------------------------------------------------------
 
-function Detail({ task, today, busy, onComplete, onEdit, onClose }: Props & { task: Task; onEdit: () => void }) {
+function Detail({ task, members, today, busy, onComplete, onEdit, onClose }: Props & { task: Task; onEdit: () => void }) {
+  const byName = (name: string | null) => (name ? members.find((m) => m.name === name) : undefined);
+  const who = (name: string | null) => (
+    <span className="inline-flex items-center gap-1.5">
+      <Avatar member={byName(name)} size="md" />
+      {name}
+    </span>
+  );
   const overdue = task.next_due < today;
 
   const row = (label: string, value: React.ReactNode) => (
@@ -76,10 +84,12 @@ function Detail({ task, today, busy, onComplete, onEdit, onClose }: Props & { ta
           </span>,
         )}
         {row("Ricorrenza", describeRecurrence(task))}
-        {row("Assegnato a", task.assigned_to_name ?? "chi se lo prende")}
+        {row("Assegnato a", task.assigned_to_name ? who(task.assigned_to_name) : "chi se lo prende")}
         {row(
           "Ultima volta",
-          task.last_done_on ? `${formatShort(task.last_done_on, today)}${task.last_done_by ? ` · ${task.last_done_by}` : ""}` : "mai",
+          task.last_done_on
+            ? <span className="inline-flex items-center gap-1.5">{formatShort(task.last_done_on, today)}{task.last_done_by && <> · {who(task.last_done_by)}</>}</span>
+            : "mai",
         )}
       </div>
 

@@ -7,6 +7,7 @@ export interface Member {
   id: string;
   name: string;
   telegram_user_id: number | null;
+  avatar_url: string | null;
 }
 
 export interface Task {

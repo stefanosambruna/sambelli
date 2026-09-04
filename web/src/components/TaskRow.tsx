@@ -2,12 +2,14 @@ import { Check } from "lucide-react";
 import { useRef, useState } from "react";
 import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
 import { describeRecurrence } from "../lib/format.ts";
-import type { Task } from "../types.ts";
+import type { Member, Task } from "../types.ts";
+import { Avatar } from "./Avatar.tsx";
 
 const THRESHOLD = 88; // px di trascinamento per far scattare l'azione
 
 interface Props {
   task: Task;
+  members: Member[];
   today: string;
   overdue: boolean;
   onComplete: (t: Task) => void;
@@ -15,7 +17,8 @@ interface Props {
 }
 
 /** Riga con swipe a destra = fatto. Tap = apri. */
-export function TaskRow({ task, today, overdue, onComplete, onOpen }: Props) {
+export function TaskRow({ task, members, today, overdue, onComplete, onOpen }: Props) {
+  const byName = (name: string | null) => (name ? members.find((m) => m.name === name) : undefined);
   const [dx, setDx] = useState(0);
   const [animating, setAnimating] = useState(false);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -88,10 +91,18 @@ export function TaskRow({ task, today, overdue, onComplete, onOpen }: Props) {
         <div className="flex items-baseline justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[17px] leading-6 break-words">{task.title}</div>
-            <div className="mt-0.5 truncate text-[13px] text-hint">
-              {describeRecurrence(task)}
-              {task.last_done_on && <> · ultima {formatShort(task.last_done_on, today)}{task.last_done_by ? ` (${task.last_done_by})` : ""}</>}
-              {task.assigned_to_name && <> · → {task.assigned_to_name}</>}
+            <div className="mt-0.5 flex items-center gap-1 truncate text-[13px] text-hint">
+              <span className="truncate">
+                {describeRecurrence(task)}
+                {task.last_done_on && <> · ultima {formatShort(task.last_done_on, today)}</>}
+              </span>
+              {task.last_done_on && <Avatar member={byName(task.last_done_by)} />}
+              {task.assigned_to_name && (
+                <>
+                  <span>· →</span>
+                  <Avatar member={byName(task.assigned_to_name)} />
+                </>
+              )}
             </div>
           </div>
           <div className={`shrink-0 text-[13px] ${overdue ? "font-semibold text-danger" : "text-hint"}`}>
