@@ -3,9 +3,11 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./styles.css";
+import { startAutoUpdate } from "./lib/autoUpdate.ts";
 import { initTelegram } from "./telegram.ts";
 
 initTelegram();
+startAutoUpdate();
 
 const queryClient = new QueryClient({
   defaultOptions: {
