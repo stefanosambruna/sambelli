@@ -1,4 +1,4 @@
-import { Check, Clock } from "lucide-react";
+import { Check } from "lucide-react";
 import { useRef, useState } from "react";
 import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
 import { describeRecurrence } from "../lib/format.ts";
@@ -11,12 +11,11 @@ interface Props {
   today: string;
   overdue: boolean;
   onComplete: (t: Task) => void;
-  onPostpone: (t: Task) => void;
   onOpen: (t: Task) => void;
 }
 
-/** Riga con swipe: destra = fatto, sinistra = domani. Tap = apri. */
-export function TaskRow({ task, today, overdue, onComplete, onPostpone, onOpen }: Props) {
+/** Riga con swipe a destra = fatto. Tap = apri. */
+export function TaskRow({ task, today, overdue, onComplete, onOpen }: Props) {
   const [dx, setDx] = useState(0);
   const [animating, setAnimating] = useState(false);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -39,9 +38,9 @@ export function TaskRow({ task, today, overdue, onComplete, onPostpone, onOpen }
       if (axis.current === "h") (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     }
     if (axis.current !== "h") return;
-    // resistenza oltre la soglia
-    const limited = Math.sign(mx) * Math.min(Math.abs(mx), THRESHOLD + (Math.abs(mx) - THRESHOLD) * 0.25);
-    setDx(limited);
+    // solo verso destra; resistenza oltre la soglia
+    if (mx <= 0) return setDx(0);
+    setDx(Math.min(mx, THRESHOLD + (mx - THRESHOLD) * 0.25));
   };
 
   const finish = (e: React.PointerEvent) => {
@@ -51,12 +50,11 @@ export function TaskRow({ task, today, overdue, onComplete, onPostpone, onOpen }
     start.current = null;
     axis.current = null;
     setAnimating(true);
-    if (wasSwipe && Math.abs(mx) >= THRESHOLD) {
-      setDx(Math.sign(mx) * window.innerWidth);
+    if (wasSwipe && mx >= THRESHOLD) {
+      setDx(window.innerWidth);
       window.setTimeout(() => {
         setDx(0);
-        if (mx > 0) onComplete(task);
-        else onPostpone(task);
+        onComplete(task);
       }, 180);
       return;
     }
@@ -64,23 +62,18 @@ export function TaskRow({ task, today, overdue, onComplete, onPostpone, onOpen }
     if (!wasSwipe && Math.abs(mx) < 8) onOpen(task);
   };
 
-  const progress = Math.min(Math.abs(dx) / THRESHOLD, 1);
+  const progress = Math.min(dx / THRESHOLD, 1);
   const armed = progress >= 1;
 
   return (
     <div className="relative overflow-hidden bg-card select-none touch-pan-y">
       {/* sfondo azione */}
       <div
-        className={`absolute inset-0 flex items-center justify-between px-5 text-white transition-colors ${
-          dx > 0 ? "bg-done" : dx < 0 ? "bg-snooze" : "bg-transparent"
-        }`}
+        className={`absolute inset-0 flex items-center px-5 text-white ${dx > 0 ? "bg-done" : "bg-transparent"}`}
         style={{ opacity: 0.35 + progress * 0.65 }}
       >
         <span className={`flex items-center gap-2 font-medium ${dx > 0 ? "" : "invisible"} ${armed ? "scale-110" : ""}`}>
           <Check size={22} /> Fatto
-        </span>
-        <span className={`flex items-center gap-2 font-medium ${dx < 0 ? "" : "invisible"} ${armed ? "scale-110" : ""}`}>
-          Domani <Clock size={22} />
         </span>
       </div>
 

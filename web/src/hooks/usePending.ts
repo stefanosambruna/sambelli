@@ -6,13 +6,9 @@ import type { Task } from "../types.ts";
 
 export const UNDO_MS = 6000;
 
-export type PendingKind = "complete" | "postpone";
-
 export interface Pending {
   key: string;
-  kind: PendingKind;
   task: Task;
-  until?: string;
   deadline: number;
 }
 
@@ -30,8 +26,7 @@ export function usePending() {
 
   const send = useCallback(async (p: Pending, keepalive = false) => {
     try {
-      if (p.kind === "complete") await api.complete(p.task.id, keepalive);
-      else await api.postpone(p.task.id, p.until!, keepalive);
+      await api.complete(p.task.id, keepalive);
     } catch (err) {
       console.error(err);
       alert(err instanceof Error ? err.message : "Errore");
@@ -48,11 +43,11 @@ export function usePending() {
     void send(p, keepalive);
   }, [send]);
 
-  const add = useCallback((kind: PendingKind, task: Task, until?: string) => {
+  const add = useCallback((task: Task) => {
     if (itemsRef.current.some((x) => x.task.id === task.id)) return;
-    const key = `${kind}:${task.id}:${Date.now()}`;
+    const key = `${task.id}:${Date.now()}`;
     const deadline = Date.now() + UNDO_MS;
-    setItems((xs) => [...xs, { key, kind, task, until, deadline }]);
+    setItems((xs) => [...xs, { key, task, deadline }]);
     timers.current.set(key, window.setTimeout(() => commit(key), UNDO_MS));
     haptic.success();
   }, [commit]);

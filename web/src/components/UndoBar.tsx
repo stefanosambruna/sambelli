@@ -16,7 +16,6 @@ export function UndoBar({ items, onUndo }: { items: Pending[]; onUndo: (key: str
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex flex-col items-stretch gap-2 px-3 pb-[max(env(safe-area-inset-bottom),12px)]">
       {items.slice(-3).map((p) => {
         const left = Math.max(0, p.deadline - Date.now()) / UNDO_MS;
-        const label = p.kind === "complete" ? "fatto" : "rimandato a domani";
         return (
           <button
             key={p.key}
@@ -25,7 +24,7 @@ export function UndoBar({ items, onUndo }: { items: Pending[]; onUndo: (key: str
             className="pointer-events-auto relative flex items-center justify-between overflow-hidden rounded-xl bg-[#1c1c1e] px-4 py-3 text-left text-white shadow-lg active:opacity-90"
           >
             <span className="min-w-0 truncate text-[15px]">
-              <b>{p.task.title}</b> {label}
+              <b>{p.task.title}</b> fatto
             </span>
             <span className="ml-3 flex shrink-0 items-center gap-1 text-[15px] font-semibold text-[#6ab0f3]">
               <Undo2 size={18} /> Annulla

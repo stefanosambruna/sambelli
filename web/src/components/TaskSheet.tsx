@@ -57,7 +57,7 @@ export function TaskSheet({ task, members, today, busy, onSave, onPostpone, onAr
     onSave(input);
   };
 
-  const field = "w-full rounded-xl bg-bg2 px-3 py-2.5 outline-none focus:ring-2 focus:ring-accent";
+  const field = "block w-full min-w-0 max-w-full appearance-none rounded-xl bg-bg2 px-3 py-2.5 outline-none focus:ring-2 focus:ring-accent";
   const label = "mb-1 block text-[13px] text-hint";
 
   return (
@@ -65,7 +65,7 @@ export function TaskSheet({ task, members, today, busy, onSave, onPostpone, onAr
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl bg-bg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3"
+        className="max-h-[92dvh] w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-3xl bg-bg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-hint/40" />
         <div className="mb-4 flex items-center justify-between">
@@ -102,11 +102,11 @@ export function TaskSheet({ task, members, today, busy, onSave, onPostpone, onAr
                 type="number"
                 min={1}
                 inputMode="numeric"
-                className="w-16 rounded-lg bg-bg px-2 py-1.5 text-center"
+                className="w-16 min-w-0 appearance-none rounded-lg bg-bg px-2 py-1.5 text-center"
                 value={everyN}
                 onChange={(e) => setEveryN(Math.max(1, Number(e.target.value) || 1))}
               />
-              <select className="flex-1 rounded-lg bg-bg px-2 py-1.5" value={unit} onChange={(e) => setUnit(e.target.value as RecurrenceUnit)}>
+              <select className="min-w-0 flex-1 appearance-none rounded-lg bg-bg px-2 py-1.5" value={unit} onChange={(e) => setUnit(e.target.value as RecurrenceUnit)}>
                 {UNITS.map(([u, l]) => <option key={u} value={u}>{l}</option>)}
               </select>
             </div>
@@ -147,9 +147,9 @@ export function TaskSheet({ task, members, today, busy, onSave, onPostpone, onAr
         {task && (
           <div className="mt-6 border-t border-bg2 pt-4">
             <label className={label}>Rimanda solo questa volta a</label>
-            <div className="flex gap-2">
-              <input type="date" className={field} value={postponeTo} min={today} onChange={(e) => setPostponeTo(e.target.value)} />
-              <button type="button" disabled={busy} onClick={() => onPostpone(task, postponeTo)} className="shrink-0 rounded-xl bg-bg2 px-4 font-medium text-link">
+            <div className="flex min-w-0 gap-2">
+              <input type="date" className={`${field} flex-1`} value={postponeTo} min={today} onChange={(e) => setPostponeTo(e.target.value)} />
+              <button type="button" disabled={busy} onClick={() => onPostpone(task, postponeTo)} className="shrink-0 rounded-xl bg-bg2 px-4 py-2.5 font-medium text-link">
                 Rimanda
               </button>
             </div>

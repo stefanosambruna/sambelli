@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { addDays, type Bucket, bucketFor, formatShort } from "../../supabase/functions/_shared/dates.ts";
+import { type Bucket, bucketFor, formatShort } from "../../supabase/functions/_shared/dates.ts";
 import { api, ApiError } from "./api.ts";
 import { DoneList } from "./components/DoneList.tsx";
 import { Section } from "./components/Section.tsx";
@@ -111,7 +111,7 @@ export function App() {
             <RefreshCw size={18} className={agenda.isFetching ? "animate-spin" : ""} />
           </button>
         </div>
-        {today && <div className="text-[13px] text-hint">{formatShort(today)} · scorri a destra per fatto, a sinistra per domani</div>}
+        {today && <div className="text-[13px] text-hint">{formatShort(today)} · scorri a destra per segnare fatto</div>}
         <div className="relative mt-2">
           <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-hint" />
           <input
@@ -152,8 +152,7 @@ export function App() {
                   task={t}
                   today={today}
                   overdue={b === "overdue"}
-                  onComplete={(task) => pending.add("complete", task)}
-                  onPostpone={(task) => pending.add("postpone", task, addDays(today, 1))}
+                  onComplete={(task) => pending.add(task)}
                   onOpen={(task) => setSheet({ open: true, task })}
                 />
               ))}

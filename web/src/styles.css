@@ -18,7 +18,10 @@
 
 /* Nel layer base, altrimenti queste regole vincerebbero sulle utility di Tailwind. */
 @layer base {
-  html, body { background: var(--color-bg2); color: var(--color-fg); }
+  html, body { background: var(--color-bg2); color: var(--color-fg); overflow-x: hidden; max-width: 100vw; }
+  /* Su iOS gli input date/select hanno una larghezza minima intrinseca che sfonda il contenitore */
+  input[type="date"], select { min-width: 0; max-width: 100%; box-sizing: border-box; -webkit-appearance: none; }
+  input[type="date"] { display: block; text-align: left; }
   body { margin: 0; font-family: var(--font-sans); -webkit-tap-highlight-color: transparent; overscroll-behavior-y: contain; }
   /* Safari iOS zooma sugli input sotto i 16px */
   input, select, textarea { font-size: 16px; }

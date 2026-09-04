@@ -163,7 +163,7 @@ Per il database locale: `supabase db reset` riapplica migrazioni e seed; `psql "
 
 ## Mini App (web/)
 
-Agenda a colpo d'occhio dentro Telegram: swipe a destra = fatto, a sinistra = domani, con sei
+Agenda a colpo d'occhio dentro Telegram: swipe a destra = fatto, con sei
 secondi per annullare prima che parta la notifica all'altro; tap = modifica; "+" = nuovo task;
 "Fatti oggi" con annullamento vero. Stack: Vite, React 19, TypeScript, Tailwind 4, TanStack Query.
 
