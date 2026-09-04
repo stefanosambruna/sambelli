@@ -16,5 +16,5 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "../supabase/functions/_shared/dates.ts"]
+  "include": ["src", "../supabase/functions/_shared/dates.ts", "../supabase/functions/_shared/recurrence.ts"]
 }

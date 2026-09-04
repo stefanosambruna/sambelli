@@ -25,6 +25,7 @@ export interface Task {
   status: TaskStatus;
   last_done_on: IsoDate | null;
   last_done_by: string | null;
+  updated_at: string;
 }
 
 export interface Completion {

@@ -17,20 +17,22 @@ export function UndoBar({ items, onUndo }: { items: Pending[]; onUndo: (key: str
       {items.slice(-3).map((p) => {
         const left = Math.max(0, p.deadline - Date.now()) / UNDO_MS;
         return (
-          <button
+          <div
             key={p.key}
-            type="button"
-            onClick={() => onUndo(p.key)}
-            className="pointer-events-auto relative flex items-center justify-between overflow-hidden rounded-xl bg-[#1c1c1e] px-4 py-3 text-left text-white shadow-lg active:opacity-90"
+            className="pointer-events-auto relative flex items-center justify-between overflow-hidden rounded-xl bg-[#1c1c1e] px-4 py-2 text-left text-white shadow-lg"
           >
             <span className="min-w-0 truncate text-[15px]">
               <b>{p.task.title}</b> fatto
             </span>
-            <span className="ml-3 flex shrink-0 items-center gap-1 text-[15px] font-semibold text-[#6ab0f3]">
+            <button
+              type="button"
+              onClick={() => onUndo(p.key)}
+              className="-my-2 ml-3 flex shrink-0 items-center gap-1 rounded-lg px-2 py-3 text-[15px] font-semibold text-[#6ab0f3] active:opacity-70"
+            >
               <Undo2 size={18} /> Annulla
-            </span>
+            </button>
             <span className="absolute inset-x-0 bottom-0 h-0.5 bg-[#6ab0f3]" style={{ width: `${left * 100}%` }} />
-          </button>
+          </div>
         );
       })}
     </div>

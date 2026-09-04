@@ -1,7 +1,7 @@
 import { ChevronLeft, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { formatShort } from "../../../supabase/functions/_shared/dates.ts";
-import { describeRecurrence } from "../lib/format.ts";
+import { describeRecurrence } from "../../../supabase/functions/_shared/recurrence.ts";
 import type { Member, Task, TaskStatus } from "../types.ts";
 import { Avatar } from "./Avatar.tsx";
 
@@ -43,7 +43,7 @@ export function InactiveView({ status, tasks, members, today, loading, onOpen, o
             className="w-full rounded-xl bg-bg py-2 pl-9 pr-9 outline-none placeholder:text-hint"
           />
           {query && (
-            <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-hint" aria-label="Pulisci">
+            <button type="button" onClick={() => setQuery("")} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-2.5 text-hint" aria-label="Pulisci">
               <X size={16} />
             </button>
           )}
@@ -58,7 +58,9 @@ export function InactiveView({ status, tasks, members, today, loading, onOpen, o
         <div className="overflow-hidden rounded-2xl bg-card divide-y divide-bg2">
           {items.map((t) => (
             <button key={t.id} type="button" onClick={() => onOpen(t)} className="block w-full px-4 py-3 text-left active:bg-bg2">
-              <div className="break-words text-[17px] leading-6 text-hint">{t.title}</div>
+              <div className={`break-words text-[17px] leading-6 ${status === "done" ? "text-fg line-through decoration-hint/60" : "text-fg"}`}>
+                {t.title}
+              </div>
               <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-hint">
                 {t.last_done_on
                   ? (

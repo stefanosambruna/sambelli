@@ -17,7 +17,7 @@ import { type AgentContext, executeTool } from "../_shared/agent.ts";
 import { todayAtHome } from "../_shared/dates.ts";
 import {
   getOrCreateMember,
-  latestCompletion,
+  getTask,
   listActiveTasks,
   listHistory,
   listInactiveTasks,
@@ -25,6 +25,7 @@ import {
   type Member,
 } from "../_shared/db.ts";
 import { broadcast, isChatAllowed } from "../_shared/telegram.ts";
+import { InitDataError, verifyInitData } from "../_shared/initdata.ts";
 import { db } from "../_shared/db.ts";
 
 const AVATAR_TTL_S = 6 * 3600;
@@ -39,6 +40,11 @@ async function withAvatars<T extends Member>(members: T[]): Promise<(T & { avata
 }
 
 const INIT_DATA_MAX_AGE_S = 24 * 3600;
+
+/** In produzione SUPABASE_URL è *.supabase.co: la scorciatoia di sviluppo non deve esistere lì. */
+function isHosted(): boolean {
+  return (Deno.env.get("SUPABASE_URL") ?? "").includes(".supabase.co");
+}
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -68,57 +74,13 @@ function json(req: Request, body: unknown, status = 200): Response {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Verifica di initData (https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app)
-
-async function hmacSha256(key: BufferSource, message: string): Promise<ArrayBuffer> {
-  const k = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message));
-}
-
-function hex(buf: ArrayBuffer): string {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-interface TelegramWebAppUser {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-}
-
-export async function verifyInitData(initData: string, botToken: string): Promise<TelegramWebAppUser> {
-  const params = new URLSearchParams(initData);
-  const hash = params.get("hash");
-  if (!hash) throw new HttpError(401, "initData senza hash");
-  params.delete("hash");
-  const dataCheck = [...params.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => `${k}=${v}`).join("\n");
-  const secret = await hmacSha256(new TextEncoder().encode("WebAppData"), botToken);
-  const expected = hex(await hmacSha256(secret, dataCheck));
-  if (expected.length !== hash.length || !timingSafeEqual(expected, hash)) {
-    throw new HttpError(401, "initData non valida");
-  }
-  const authDate = Number(params.get("auth_date") ?? 0);
-  if (!authDate || Date.now() / 1000 - authDate > INIT_DATA_MAX_AGE_S) {
-    throw new HttpError(401, "initData scaduta: riapri l'app");
-  }
-  const user = params.get("user");
-  if (!user) throw new HttpError(401, "initData senza utente");
-  return JSON.parse(user) as TelegramWebAppUser;
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
 async function authenticate(req: Request): Promise<Member> {
   let telegramId: number;
   let name: string;
 
   const devId = Deno.env.get("APP_DEV_USER_ID");
-  if (devId && req.headers.get("x-dev-user-id") === devId) {
+  if (devId && !isHosted() && req.headers.get("x-dev-user-id") === devId) {
+    console.warn("app-api: autenticazione di sviluppo (APP_DEV_USER_ID)");
     telegramId = Number(devId);
     name = "Dev";
   } else {
@@ -126,7 +88,12 @@ async function authenticate(req: Request): Promise<Member> {
     if (!initData) throw new HttpError(401, "Apri l'app da Telegram");
     const token = Deno.env.get("TELEGRAM_BOT_TOKEN");
     if (!token) throw new HttpError(500, "TELEGRAM_BOT_TOKEN mancante");
-    const user = await verifyInitData(initData, token);
+    let user;
+    try {
+      user = await verifyInitData(initData, token, { maxAgeSeconds: INIT_DATA_MAX_AGE_S });
+    } catch (err) {
+      throw new HttpError(401, err instanceof InitDataError ? err.message : "initData non valida");
+    }
     telegramId = user.id;
     name = user.first_name || user.username || `utente ${user.id}`;
   }
@@ -205,9 +172,20 @@ Deno.serve(async (req) => {
         return json(req, await mutate(me, "update_task", { ...(await readBody(req)), task_id: id }));
       }
       if (req.method === "POST" && seg[2] === "complete") {
+        // L'agenda del client può essere vecchia di minuti: se l'altro l'ha già fatto oggi
+        // non registriamo un doppione, diciamo solo com'è adesso.
+        const fresh = await getTask(id);
+        if (fresh && fresh.last_done_on === todayAtHome()) {
+          return json(req, {
+            ok: true,
+            already: true,
+            title: fresh.title,
+            next_due: fresh.next_due,
+            status: fresh.status,
+          });
+        }
         const result = await mutate(me, "complete_task", { task_id: id }) as Record<string, unknown>;
-        const completion = await latestCompletion(id);
-        return json(req, { ...result, completion_id: completion?.id ?? null });
+        return json(req, result);
       }
       if (req.method === "POST" && seg[2] === "undo") {
         return json(req, await mutate(me, "undo_completion", { task_id: id }));

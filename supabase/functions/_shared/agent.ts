@@ -322,6 +322,7 @@ export async function executeTool(ctx: AgentContext, name: string, input: ToolIn
     }
     case "archive_task": {
       const task = requireTask(ctx, str(input, "task_id"));
+      if (task.status !== "active") throw new Error(`"${task.title}" non è in agenda (${task.status})`);
       const updated = await updateTask(task.id, { status: "archived" });
       ctx.events.push(`🗄 ${ctx.sender.name} ha archiviato "${task.title}"`);
       return JSON.stringify({ ok: true, title: updated.title, status: updated.status });

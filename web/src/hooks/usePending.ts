@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.ts";
-import { haptic } from "../telegram.ts";
+import { haptic, showAlert } from "../telegram.ts";
 import type { Task } from "../types.ts";
 
 export const UNDO_MS = 6000;
@@ -20,6 +20,7 @@ export interface Pending {
 export function usePending() {
   const qc = useQueryClient();
   const [items, setItems] = useState<Pending[]>([]);
+  const [failed, setFailed] = useState<string | null>(null);
   const timers = useRef(new Map<string, number>());
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -29,9 +30,12 @@ export function usePending() {
       await api.complete(p.task.id, keepalive);
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Errore");
+      // Se stiamo uscendo dall'app un dialogo non si vedrebbe: lo teniamo per il rientro.
+      if (document.visibilityState === "hidden") setFailed(`Non sono riuscito a segnare "${p.task.title}".`);
+      else showAlert(err instanceof Error ? err.message : "Errore");
     } finally {
       qc.invalidateQueries({ queryKey: ["agenda"] });
+      qc.invalidateQueries({ queryKey: ["inactive"] });
     }
   }, [qc]);
 
@@ -79,5 +83,5 @@ export function usePending() {
   }, [commit]);
 
   const pendingTaskIds = new Set(items.map((p) => p.task.id));
-  return { items, add, undo, pendingTaskIds };
+  return { items, add, undo, pendingTaskIds, failed, clearFailed: () => setFailed(null) };
 }

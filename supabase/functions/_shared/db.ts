@@ -20,16 +20,25 @@ export interface TaskRow {
   unit: RecurrenceUnit | null;
   anchor: RecurrenceAnchor;
   next_due: IsoDate;
-  postponed_until: IsoDate | null;
   assigned_to: string | null;
   status: TaskStatus;
 }
 
-/** Riga della vista task_overview: next_due è già la data effettiva. */
-export interface TaskOverview extends Omit<TaskRow, "postponed_until"> {
+/** Riga della vista task_overview (le colonne sono quelle della vista, non della tabella). */
+export interface TaskOverview {
+  id: string;
+  title: string;
+  notes: string | null;
+  every_n: number | null;
+  unit: RecurrenceUnit | null;
+  anchor: RecurrenceAnchor;
+  next_due: IsoDate;
+  status: TaskStatus;
+  assigned_to: string | null;
   assigned_to_name: string | null;
   last_done_on: IsoDate | null;
   last_done_by: string | null;
+  updated_at: string;
 }
 
 export interface CompletionRecord {

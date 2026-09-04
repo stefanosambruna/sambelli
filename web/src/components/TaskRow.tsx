@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 import { useRef, useState } from "react";
 import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
-import { describeRecurrence } from "../lib/format.ts";
+import { describeRecurrence } from "../../../supabase/functions/_shared/recurrence.ts";
 import type { Member, Task } from "../types.ts";
 import { Avatar } from "./Avatar.tsx";
 
@@ -50,6 +50,9 @@ export function TaskRow({ task, members, today, overdue, onComplete, onOpen }: P
     if (!start.current) return;
     const wasSwipe = axis.current === "h";
     const mx = e.clientX - start.current.x;
+    const my = e.clientY - start.current.y;
+    // Tap = nessun asse bloccato, nessuno spostamento, e il gesto non è stato annullato.
+    const tap = axis.current === null && Math.abs(mx) < 8 && Math.abs(my) < 8 && e.type !== "pointercancel";
     start.current = null;
     axis.current = null;
     setAnimating(true);
@@ -62,7 +65,7 @@ export function TaskRow({ task, members, today, overdue, onComplete, onOpen }: P
       return;
     }
     setDx(0);
-    if (!wasSwipe && Math.abs(mx) < 8) onOpen(task);
+    if (tap) onOpen(task);
   };
 
   const progress = Math.min(dx / THRESHOLD, 1);

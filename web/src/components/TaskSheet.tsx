@@ -1,7 +1,7 @@
 import { Archive, Check, Pencil, RotateCcw, Undo2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatRelative, formatShort } from "../../../supabase/functions/_shared/dates.ts";
-import { describeRecurrence } from "../lib/format.ts";
+import { describeRecurrence } from "../../../supabase/functions/_shared/recurrence.ts";
 import type { Completion, Member, RecurrenceAnchor, RecurrenceUnit, Task, TaskInput } from "../types.ts";
 import { Avatar } from "./Avatar.tsx";
 
@@ -21,10 +21,29 @@ interface Props {
 
 const UNITS: [RecurrenceUnit, string][] = [["day", "giorni"], ["week", "settimane"], ["month", "mesi"], ["year", "anni"]];
 
+/** Altezza coperta dalla tastiera su iOS: senza, i campi in basso finiscono sotto. */
+function useKeyboardInset(): number {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+  return inset;
+}
+
 /** Pannello dal basso: dettaglio in sola lettura di un task, oppure form (nuovo / modifica). */
 export function TaskSheet(props: Props) {
   const { task, onClose } = props;
   const [editing, setEditing] = useState(task === null);
+  const keyboard = useKeyboardInset();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -32,11 +51,22 @@ export function TaskSheet(props: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Tap sullo sfondo: se c'è la tastiera aperta si chiude solo quella, per non
+  // buttare via quello che si stava scrivendo.
+  const onBackdrop = () => {
+    const el = document.activeElement as HTMLElement | null;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) el.blur();
+    else onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40" onClick={onBackdrop}>
       <div
+        role="dialog"
+        aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[92dvh] w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-3xl bg-bg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3"
+        style={{ maxHeight: `calc(92dvh - ${keyboard}px)`, paddingBottom: keyboard ? keyboard + 16 : undefined }}
+        className="w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-3xl bg-bg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-hint/40" />
         {task && !editing
@@ -177,7 +207,7 @@ function Detail(
                       type="button"
                       disabled={busy}
                       onClick={() => onUndo(c)}
-                      className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[14px] text-link active:bg-bg2 disabled:opacity-50"
+                      className="-my-2 flex shrink-0 items-center gap-1 rounded-lg px-2 py-2.5 text-[14px] text-link active:bg-bg2 disabled:opacity-50"
                     >
                       <Undo2 size={15} /> Annulla
                     </button>

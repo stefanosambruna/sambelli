@@ -1,7 +1,10 @@
 // Dal dominio al testo Telegram (HTML). Nessuna logica di business qui.
 
 import { type Bucket, bucketFor, formatRelative, formatShort, type IsoDate } from "./dates.ts";
-import type { CompletionRecord, RecurrenceUnit, TaskOverview, TaskRow } from "./db.ts";
+import type { CompletionRecord, TaskOverview, TaskRow } from "./db.ts";
+import { describeRecurrence } from "./recurrence.ts";
+
+export { describeRecurrence };
 import { escapeHtml, type InlineKeyboardMarkup } from "./telegram.ts";
 
 const BUCKET_TITLE: Record<Bucket, string> = {
@@ -11,20 +14,6 @@ const BUCKET_TITLE: Record<Bucket, string> = {
   month: "📆 Questo mese",
   later: "⏭ Più avanti",
 };
-
-const UNIT_LABEL: Record<RecurrenceUnit, [string, string]> = {
-  day: ["giorno", "giorni"],
-  week: ["settimana", "settimane"],
-  month: ["mese", "mesi"],
-  year: ["anno", "anni"],
-};
-
-export function describeRecurrence(t: Pick<TaskRow, "every_n" | "unit" | "anchor">): string {
-  if (!t.every_n || !t.unit) return "una tantum";
-  const [one, many] = UNIT_LABEL[t.unit];
-  const base = t.every_n === 1 ? `ogni ${one}` : `ogni ${t.every_n} ${many}`;
-  return t.anchor === "completion" ? `${base} da quando lo fai` : `${base} a calendario`;
-}
 
 export function groupByBucket(tasks: TaskOverview[], today: IsoDate): Map<Bucket, TaskOverview[]> {
   const out = new Map<Bucket, TaskOverview[]>();

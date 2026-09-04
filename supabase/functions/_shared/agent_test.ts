@@ -19,12 +19,14 @@ const oneOff: TaskOverview = {
   assigned_to_name: null,
   last_done_on: null,
   last_done_by: null,
+  updated_at: "2026-09-04T00:00:00Z",
 };
+const archived: TaskOverview = { ...oneOff, id: "t-2", title: "Cancello", status: "archived" };
 const ctx = (): AgentContext => ({
   today: "2026-09-03",
   sender: ste,
   members: [ste, chiara],
-  tasks: [oneOff],
+  tasks: [oneOff, archived],
   events: [],
 });
 
@@ -39,6 +41,8 @@ Deno.test("executeTool rifiuta input invalidi prima di scrivere", async (t) => {
     ["ricorrenza su una tantum", "update_task", { task_id: "t-1", unit: "week" }, "è una tantum"],
     ["archivia un task ignoto", "archive_task", { task_id: "nope" }, "task_id sconosciuto"],
     ["update vuoto", "update_task", { task_id: "t-1" }, "Nessun campo da modificare"],
+    ["modifica di un task fuori agenda", "update_task", { task_id: "t-2", title: "X" }, "non è in agenda"],
+    ["archivio di un task fuori agenda", "archive_task", { task_id: "t-2" }, "non è in agenda"],
     ["rename vuoto", "rename_member", { name: "  " }, "name obbligatorio"],
     ["strumento ignoto", "boh", {}, "Strumento sconosciuto"],
   ];

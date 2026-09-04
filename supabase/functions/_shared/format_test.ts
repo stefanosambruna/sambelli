@@ -17,6 +17,7 @@ function task(over: Partial<TaskOverview>): TaskOverview {
     assigned_to_name: null,
     last_done_on: null,
     last_done_by: null,
+    updated_at: "2026-09-04T00:00:00Z",
     ...over,
   };
 }

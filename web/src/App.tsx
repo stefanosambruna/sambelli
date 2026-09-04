@@ -12,7 +12,7 @@ import { TaskRow } from "./components/TaskRow.tsx";
 import { TaskSheet } from "./components/TaskSheet.tsx";
 import { UndoBar } from "./components/UndoBar.tsx";
 import { usePending } from "./hooks/usePending.ts";
-import { haptic } from "./telegram.ts";
+import { confirmAction, haptic, showAlert } from "./telegram.ts";
 import type { Completion, Task, TaskInput, TaskStatus } from "./types.ts";
 
 const BUCKETS: [Bucket, string][] = [
@@ -28,15 +28,21 @@ export function App() {
   const agenda = useQuery({ queryKey: ["agenda"], queryFn: api.agenda });
   const pending = usePending();
   const [query, setQuery] = useState("");
-  const [sheet, setSheet] = useState<{ open: boolean; task: Task | null }>({ open: false, task: null });
+  // Nel pannello teniamo solo l'id: il task lo rileggiamo dalle cache, così un
+  // annullamento fatto lì dentro aggiorna anche i campi, non solo lo storico.
+  const [sheet, setSheet] = useState<{ open: boolean; id: string | null; snapshot: Task | null }>({
+    open: false,
+    id: null,
+    snapshot: null,
+  });
   const [view, setView] = useState<Exclude<TaskStatus, "active"> | null>(null);
   const [undoBusy, setUndoBusy] = useState<string | null>(null);
 
   const inactive = useQuery({ queryKey: ["inactive"], queryFn: api.inactive, enabled: view !== null });
   const history = useQuery({
-    queryKey: ["history", sheet.task?.id],
-    queryFn: () => api.history(sheet.task!.id),
-    enabled: sheet.open && sheet.task !== null,
+    queryKey: ["history", sheet.id],
+    queryFn: () => api.history(sheet.id!),
+    enabled: sheet.open && sheet.id !== null,
   });
 
   const invalidate = () => {
@@ -46,8 +52,10 @@ export function App() {
   };
   const fail = (err: unknown) => {
     haptic.warning();
-    alert(err instanceof ApiError ? err.message : "Qualcosa è andato storto");
+    showAlert(err instanceof ApiError ? err.message : "Qualcosa è andato storto");
   };
+  const closeSheet = () => setSheet({ open: false, id: null, snapshot: null });
+  const openSheet = (task: Task | null) => setSheet({ open: true, id: task?.id ?? null, snapshot: task });
 
   const save = useMutation({
     mutationFn: async ({ id, input }: { id: string | null; input: TaskInput }) => {
@@ -55,7 +63,7 @@ export function App() {
       else await api.create(input);
     },
     onSuccess: () => {
-      setSheet({ open: false, task: null });
+      closeSheet();
       invalidate();
     },
     onError: fail,
@@ -63,7 +71,7 @@ export function App() {
   const archive = useMutation({
     mutationFn: (id: string) => api.archive(id),
     onSuccess: () => {
-      setSheet({ open: false, task: null });
+      closeSheet();
       invalidate();
     },
     onError: fail,
@@ -71,7 +79,7 @@ export function App() {
   const unarchive = useMutation({
     mutationFn: (id: string) => api.unarchive(id),
     onSuccess: () => {
-      setSheet({ open: false, task: null });
+      closeSheet();
       setView(null);
       invalidate();
     },
@@ -84,8 +92,8 @@ export function App() {
       await api.undo(c.task_id);
       haptic.success();
       // Un done ripristinato torna in agenda: chiudo pannello e vista dei completati.
-      if (sheet.task?.id === c.task_id && sheet.task.status === "done") {
-        setSheet({ open: false, task: null });
+      if (sheet.id === c.task_id && sheetTask?.status === "done") {
+        closeSheet();
         setView(null);
       }
       invalidate();
@@ -98,6 +106,9 @@ export function App() {
 
   const data = agenda.data;
   const today = data?.today ?? "";
+  const sheetTask = sheet.id
+    ? data?.tasks.find((t) => t.id === sheet.id) ?? inactive.data?.tasks.find((t) => t.id === sheet.id) ?? sheet.snapshot
+    : null;
   const q = query.trim().toLowerCase();
 
   const grouped = useMemo(() => {
@@ -145,12 +156,19 @@ export function App() {
             className="w-full rounded-xl bg-bg py-2 pl-9 pr-9 outline-none placeholder:text-hint"
           />
           {query && (
-            <button type="button" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-hint" aria-label="Pulisci">
+            <button type="button" onClick={() => setQuery("")} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-2.5 text-hint" aria-label="Pulisci">
               <X size={16} />
             </button>
           )}
         </div>
       </header>
+
+      {pending.failed && (
+        <div className="mx-3 mt-3 flex items-start justify-between gap-3 rounded-xl bg-danger/10 px-4 py-3 text-[14px] text-danger">
+          <span>{pending.failed}</span>
+          <button type="button" onClick={pending.clearFailed} className="shrink-0 font-medium" aria-label="Chiudi avviso">OK</button>
+        </div>
+      )}
 
       <main className="pt-3">
         {agenda.isLoading && <p className="px-4 text-hint">Carico…</p>}
@@ -167,7 +185,7 @@ export function App() {
 
         {doneToday.length > 0 && (
           <Section title="Fatti oggi" count={doneToday.length}>
-            <DoneList items={doneToday} members={data?.members ?? []} today={today} onUndo={undoDone} busyId={undoBusy} />
+            <DoneList items={doneToday} members={data?.members ?? []} onUndo={undoDone} busyId={undoBusy} />
           </Section>
         )}
 
@@ -194,7 +212,7 @@ export function App() {
                   today={today}
                   overdue={b === "overdue"}
                   onComplete={(task) => pending.add(task)}
-                  onOpen={(task) => setSheet({ open: true, task })}
+                  onOpen={openSheet}
                 />
               ))}
             </Section>
@@ -205,8 +223,10 @@ export function App() {
 
       <button
         type="button"
-        onClick={() => setSheet({ open: true, task: null })}
-        className="fixed bottom-[max(env(safe-area-inset-bottom),16px)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-fg shadow-lg active:scale-95"
+        onClick={() => openSheet(null)}
+        className={`fixed bottom-[max(env(safe-area-inset-bottom),16px)] right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-fg shadow-lg transition-transform active:scale-95 ${
+          pending.items.length ? "-translate-y-16" : ""
+        }`}
         aria-label="Nuovo task"
       >
         <Plus size={26} />
@@ -221,28 +241,32 @@ export function App() {
           members={inactive.data?.members ?? data?.members ?? []}
           today={inactive.data?.today ?? today}
           loading={inactive.isLoading}
-          onOpen={(task) => setSheet({ open: true, task })}
+          onOpen={openSheet}
           onBack={() => setView(null)}
         />
       )}
 
       {sheet.open && data && (
         <TaskSheet
-          key={sheet.task?.id ?? "new"}
-          task={sheet.task}
+          key={sheet.id ?? "new"}
+          task={sheetTask}
           members={data.members}
           today={today}
-          busy={save.isPending || archive.isPending || unarchive.isPending}
-          onSave={(input) => save.mutate({ id: sheet.task?.id ?? null, input })}
+          busy={save.isPending || archive.isPending || unarchive.isPending || undoBusy !== null}
+          onSave={(input) => save.mutate({ id: sheet.id, input })}
           onComplete={(task) => {
-            setSheet({ open: false, task: null });
+            closeSheet();
             pending.add(task);
           }}
-          onArchive={(task) => confirm(`Archiviare "${task.title}"? Sparisce dall'agenda e non torna più da solo.`) && archive.mutate(task.id)}
+          onArchive={async (task) => {
+            if (await confirmAction(`Archiviare "${task.title}"? Sparisce dall'agenda e non torna più da solo.`)) {
+              archive.mutate(task.id);
+            }
+          }}
           onUnarchive={(task) => unarchive.mutate(task.id)}
           onUndo={undoDone}
           history={history.data?.history}
-          onClose={() => setSheet({ open: false, task: null })}
+          onClose={closeSheet}
         />
       )}
     </div>

@@ -48,6 +48,6 @@ jobs:
         run: supabase db push
       - name: Deploy Edge Functions
         if: steps.check.outputs.ready == 'true'
-        run: |
-          supabase functions deploy telegram-webhook --project-ref "$PROJECT_ID"
-          supabase functions deploy daily-recap --project-ref "$PROJECT_ID"
+        # Senza nomi: deploya tutte le funzioni sotto supabase/functions, così
+        # aggiungerne una non richiede di ricordarsi di questo file.
+        run: supabase functions deploy --project-ref "$PROJECT_ID"

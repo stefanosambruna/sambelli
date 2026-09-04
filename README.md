@@ -83,8 +83,7 @@ esiste ma è l'eccezione.
 4. Deploy delle funzioni e registrazione del webhook:
 
    ```bash
-   supabase functions deploy telegram-webhook
-   supabase functions deploy daily-recap
+   supabase functions deploy
    scripts/set-webhook.sh <PROJECT_REF>
    ```
 
@@ -137,7 +136,7 @@ cd supabase/functions
 deno task check                     # typecheck
 deno task test                      # test unitari (date, formattazione, allowlist, validazioni agente)
 docker exec -i supabase_db_sambelli psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
-  < supabase/tests/complete_task_test.sql   # test delle funzioni SQL, in rollback
+  < supabase/tests/complete_task_test.sql   # test delle funzioni SQL, in rollback (anche in CI)
 cd ../..
 supabase functions serve --env-file supabase/functions/.env
 ```

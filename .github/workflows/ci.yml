@@ -6,6 +6,30 @@ on:
     branches: [main]
 
 jobs:
+  db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+        ports: ["5432:5432"]
+    env:
+      PGPASSWORD: postgres
+      PSQL: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ruoli e schema storage attesi dalle migrazioni
+        run: |
+          $PSQL -c "create role anon; create role authenticated; create role service_role;"
+          $PSQL -c "create schema storage; create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);"
+      - name: Applica le migrazioni
+        run: for f in supabase/migrations/*.sql; do echo "== $f"; $PSQL -f "$f"; done
+      - name: Test delle funzioni SQL
+        run: $PSQL -f supabase/tests/complete_task_test.sql
+
   web:
     runs-on: ubuntu-latest
     defaults:
