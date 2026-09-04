@@ -35,7 +35,9 @@ export function TaskSheet(props: Props) {
         className="max-h-[92dvh] w-full max-w-full overflow-x-hidden overflow-y-auto rounded-t-3xl bg-bg px-4 pb-[max(env(safe-area-inset-bottom),16px)] pt-3"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-hint/40" />
-        {task && !editing ? <Detail {...props} task={task} onEdit={() => setEditing(true)} /> : <Form {...props} />}
+        {task && !editing
+          ? <Detail {...props} task={task} onEdit={() => setEditing(true)} />
+          : <Form {...props} onCancel={task ? () => setEditing(false) : onClose} />}
       </div>
     </div>
   );
@@ -101,7 +103,7 @@ function Detail({ task, today, busy, onComplete, onEdit, onClose }: Props & { ta
 
 // ---------------------------------------------------------------------------
 
-function Form({ task, members, today, busy, onSave, onArchive, onClose }: Props) {
+function Form({ task, members, today, busy, onSave, onArchive, onClose, onCancel }: Props & { onCancel: () => void }) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [notes, setNotes] = useState(task?.notes ?? "");
   const [recurring, setRecurring] = useState(!!task?.every_n);
@@ -139,7 +141,7 @@ function Form({ task, members, today, busy, onSave, onArchive, onClose }: Props)
     if (!task) input.first_due = due;
     else if (due !== task.next_due) input.next_due = due;
     if ((task?.assigned_to_name ?? "") !== assignee) input.assigned_to = assignee;
-    if (task && Object.keys(input).length === 0) return onClose();
+    if (task && Object.keys(input).length === 0) return onCancel();
     onSave(input);
   };
 
@@ -150,7 +152,7 @@ function Form({ task, members, today, busy, onSave, onArchive, onClose }: Props)
     <form onSubmit={submit}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[20px] font-semibold">{task ? "Modifica" : "Nuovo task"}</h2>
-        <button type="button" onClick={onClose} className="rounded-full p-1 text-hint active:bg-bg2" aria-label="Chiudi">
+        <button type="button" onClick={onCancel} className="rounded-full p-1 text-hint active:bg-bg2" aria-label={task ? "Annulla modifica" : "Chiudi"}>
           <X size={22} />
         </button>
       </div>

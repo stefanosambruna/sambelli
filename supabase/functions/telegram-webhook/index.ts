@@ -185,11 +185,19 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
   }
 
   const [action, taskId] = data.split(":");
-  const task = taskId ? await getTask(taskId) : null;
   const today = todayAtHome();
 
   const dropButtons = () =>
     editMessageReplyMarkup(chatId, msg.message_id, keyboardWithout(msg.reply_markup, taskId)).catch(() => {});
+
+  // Messaggi vecchi possono avere bottoni di funzioni rimosse (es. "domani"): via senza fare nulla.
+  if (action !== "d") {
+    await answerCallbackQuery(cq.id, "Questo bottone non c'è più");
+    await dropButtons();
+    return;
+  }
+
+  const task = taskId ? await getTask(taskId) : null;
 
   if (!task || !task.active) {
     await answerCallbackQuery(cq.id, "Questo task non c'è più");
@@ -208,14 +216,9 @@ async function handleCallback(cq: TelegramCallbackQuery): Promise<void> {
 
   const who = await getOrCreateMember(cq.from.id, displayName(cq.from));
 
-  if (action === "d") {
-    const updated = await completeTask(task.id, who.id, today);
-    await answerCallbackQuery(cq.id, "Segnato ✅");
-    await dropButtons();
-    await broadcast(chatId, [eventCompleted(who.name, updated, today)]);
-    await sendMessage(chatId, renderCompleted(who.name, updated, today));
-    return;
-  }
-
-  await answerCallbackQuery(cq.id);
+  const updated = await completeTask(task.id, who.id, today);
+  await answerCallbackQuery(cq.id, "Segnato ✅");
+  await dropButtons();
+  await broadcast(chatId, [eventCompleted(who.name, updated, today)]);
+  await sendMessage(chatId, renderCompleted(who.name, updated, today));
 }
