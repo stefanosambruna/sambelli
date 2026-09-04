@@ -85,7 +85,6 @@ export function App() {
   }, [data, today, q, pending.pendingTaskIds]);
 
   const doneToday = (data?.history ?? []).filter((c) => c.done_on === today && (!q || c.task_title.toLowerCase().includes(q)));
-  const doneEarlier = (data?.history ?? []).filter((c) => c.done_on !== today && (!q || c.task_title.toLowerCase().includes(q)));
   const visibleCount = [...grouped.values()].reduce((n, xs) => n + xs.length, 0);
 
   return (
@@ -135,12 +134,18 @@ export function App() {
           <p className="px-4 py-8 text-center text-hint">Nessun task con questo nome.</p>
         )}
 
+        {doneToday.length > 0 && (
+          <Section title="Fatti oggi" count={doneToday.length}>
+            <DoneList items={doneToday} members={data?.members ?? []} today={today} onUndo={undoDone} busyId={undoBusy} />
+          </Section>
+        )}
+
         {/* "Oggi" c'è sempre: vuota vuol dire che oggi non c'è niente da fare, e va detto. */}
         {data && !q && !grouped.get("overdue")?.length && !grouped.get("today")?.length && (
           <Section title="Oggi">
             <div className="px-4 py-5 text-center text-hint">
               Niente da fare oggi 🎉
-              {doneToday.length > 0 && <div className="mt-1 text-[13px]">Già fatte {doneToday.length} cose, vedi in fondo.</div>}
+              {doneToday.length > 0 && <div className="mt-1 text-[13px]">Già fatte {doneToday.length} cose, vedi sopra.</div>}
             </div>
           </Section>
         )}
@@ -165,16 +170,6 @@ export function App() {
           );
         })}
 
-        {doneToday.length > 0 && (
-          <Section title="Fatti oggi" count={doneToday.length}>
-            <DoneList items={doneToday} members={data?.members ?? []} today={today} onUndo={undoDone} busyId={undoBusy} />
-          </Section>
-        )}
-        {doneEarlier.length > 0 && (
-          <Section title="Ultimi 7 giorni">
-            <DoneList items={doneEarlier} members={data?.members ?? []} today={today} showDate onUndo={undoDone} busyId={undoBusy} />
-          </Section>
-        )}
       </main>
 
       <button

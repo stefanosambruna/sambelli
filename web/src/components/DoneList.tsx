@@ -16,7 +16,7 @@ export function DoneList({ items, members, today, showDate, onUndo, busyId }: {
       {items.map((c) => (
         <div key={c.id} className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="min-w-0">
-            <div className="truncate text-[17px] leading-6 line-through decoration-hint/60">{c.task_title}</div>
+            <div className="text-[17px] leading-6 break-words line-through decoration-hint/60">{c.task_title}</div>
             <div className="flex items-center gap-1.5 text-[13px] text-hint">
               <Avatar member={members.find((m) => m.id === c.member_id)} />
               <span>{c.member_name ?? "?"}{showDate ? ` · ${formatShort(c.done_on, today)}` : ""}{c.note ? ` · ${c.note}` : ""}</span>

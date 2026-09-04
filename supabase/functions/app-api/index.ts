@@ -3,14 +3,14 @@
 // Le mutazioni passano dagli stessi strumenti dell'agente (executeTool), quindi validazione,
 // eventi e notifiche all'altra persona sono identici a quelli del bot.
 //
-//   GET   /agenda                      task attivi, membri, storico ultimi 7 giorni
+//   GET   /agenda                      task attivi, membri, completamenti di oggi
 //   POST  /tasks                       crea (body = input di create_task)
 //   PATCH /tasks/:id                   modifica (body = input di update_task senza task_id)
 //   POST  /tasks/:id/complete          segna fatto oggi
 //   POST  /tasks/:id/undo              annulla l'ultimo completamento
 
 import { type AgentContext, executeTool } from "../_shared/agent.ts";
-import { addDays, todayAtHome } from "../_shared/dates.ts";
+import { todayAtHome } from "../_shared/dates.ts";
 import {
   getOrCreateMember,
   latestCompletion,
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
       const [tasks, members, history] = await Promise.all([
         listActiveTasks(),
         listMembers(),
-        listHistory({ since: addDays(today, -7), limit: 100 }),
+        listHistory({ since: today, limit: 100 }),
       ]);
       const withPics = await withAvatars(members);
       return json(req, {
